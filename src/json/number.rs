@@ -22,6 +22,9 @@ pub trait Integer:
 {
     /// What an issue names the type in `expected`, as Raoh for Java does.
     const EXPECTED: &'static str;
+    /// Whether a number that is not an integer of this type is reported with `actual`, as Raoh
+    /// for Java's `long_()` does and its `int_()` does not.
+    const NUMBER_HAS_ACTUAL: bool;
     /// The smallest positive value.
     const ONE: Self;
 
@@ -44,9 +47,10 @@ pub trait SignedInteger: Integer {
 }
 
 macro_rules! integer {
-    ($t:ty, $expected:literal, $via:ident) => {
+    ($t:ty, $expected:literal, $actual:literal, $via:ident) => {
         impl Integer for $t {
             const EXPECTED: &'static str = $expected;
+            const NUMBER_HAS_ACTUAL: bool = $actual;
             const ONE: Self = 1;
 
             fn from_number(n: &serde_json::Number) -> Option<Self> {
@@ -64,10 +68,10 @@ macro_rules! integer {
     };
 }
 
-integer!(i32, "integer", as_i64);
-integer!(i64, "long", as_i64);
-integer!(u32, "integer", as_u64);
-integer!(u64, "long", as_u64);
+integer!(i32, "integer", false, as_i64);
+integer!(i64, "long", true, as_i64);
+integer!(u32, "integer", false, as_u64);
+integer!(u64, "long", true, as_u64);
 
 impl SignedInteger for i32 {
     const ZERO: Self = 0;
@@ -82,8 +86,9 @@ impl SignedInteger for i64 {
 /// A decoder of a JSON integer into `T`.
 ///
 /// Missing or `null` is `required`. A value of another type, a number with a fraction or an
-/// exponent, and an integer `T` cannot hold are `type_mismatch`; only the first names the type
-/// found in `actual`. Constraints run in the order they are written, and the first to fail is the
+/// exponent, and an integer `T` cannot hold are `type_mismatch`. The type found is named in
+/// `actual` for a value of another type, and for a number too when `T` is `i64` or `u64`, as
+/// Raoh for Java does for `int_()` and `long_()`. Constraints run in the order they are written, and the first to fail is the
 /// one reported.
 #[derive(Clone, Debug)]
 pub struct IntDecoder<T> {
@@ -124,12 +129,17 @@ impl<T: Integer> Decoder<Value> for IntDecoder<T> {
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
         let found = match input {
             Value::Number(n) => T::from_number(n).ok_or_else(|| {
-                Issue::at_path(
+                let issue = Issue::at_path(
                     path,
                     codes::TYPE_MISMATCH,
                     format!("expected {}", T::EXPECTED),
                 )
-                .with_meta("expected", T::EXPECTED)
+                .with_meta("expected", T::EXPECTED);
+                if T::NUMBER_HAS_ACTUAL {
+                    issue.with_meta("actual", "number")
+                } else {
+                    issue
+                }
             }),
             Value::Null => Err(required(path)),
             other => Err(Issue::at_path(
@@ -485,11 +495,13 @@ mod tests {
     }
 
     #[test]
-    fn a_fraction_is_a_type_mismatch_without_actual() {
-        let issue = first(i64().decode(&json!(1.5)));
-        assert_eq!(issue.code(), "type_mismatch");
-        assert_eq!(issue.meta()["expected"], "long");
+    fn a_fraction_names_actual_only_for_64_bit_types() {
+        let issue = first(i32().decode(&json!(1.5)));
+        assert_eq!(issue.meta()["expected"], "integer");
         assert!(!issue.meta().contains_key("actual"));
+        let issue = first(i64().decode(&json!(1.5)));
+        assert_eq!(issue.meta()["expected"], "long");
+        assert_eq!(issue.meta()["actual"], "number");
     }
 
     #[test]

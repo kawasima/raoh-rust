@@ -27,6 +27,8 @@ url = ["dep:url"]
 
 [dev-dependencies]
 proptest = "1"
+# Reports members in input order, as Raoh for Java does, so tests/compat.rs can compare them.
+serde_json = { version = "1", features = ["preserve_order"] }
 trybuild = "1"
 
 [package.metadata.docs.rs]

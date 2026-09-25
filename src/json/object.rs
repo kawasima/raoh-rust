@@ -40,6 +40,10 @@ impl<F: FieldSet + Decoder<Value>> Decoder<Value> for Object<F> {
 impl<F: FieldSet> Object<F> {
     /// A decoder that also reports every member the fields do not declare as `unknown_field`,
     /// with the member's name as `field`, after the fields' own issues.
+    ///
+    /// The members are reported in the order the [`Value`] keeps its keys: the order of the input
+    /// with `serde_json`'s `preserve_order` feature, as Raoh for Java reports them, and sorted
+    /// without it.
     pub fn strict(self) -> Strict<F> {
         Strict(self.0)
     }

@@ -1,0 +1,1423 @@
+[ {
+  "decoder" : "string",
+  "input" : "a",
+  "ok" : "a"
+}, {
+  "decoder" : "string",
+  "input" : null,
+  "issues" : [ {
+    "path" : "",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string",
+  "input" : 1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected string",
+    "meta" : {
+      "expected" : "string",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "string",
+  "input" : [ 1 ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected string",
+    "meta" : {
+      "expected" : "string",
+      "actual" : "array"
+    }
+  } ]
+}, {
+  "decoder" : "string_normalized_email",
+  "input" : "  Ken@Example.COM ",
+  "ok" : "ken@example.com"
+}, {
+  "decoder" : "string_normalized_email",
+  "input" : "ken@example",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid email",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_non_blank",
+  "input" : "  ",
+  "issues" : [ {
+    "path" : "",
+    "code" : "blank",
+    "message_key" : "blank",
+    "message" : "must not be blank",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_non_blank",
+  "input" : "",
+  "issues" : [ {
+    "path" : "",
+    "code" : "blank",
+    "message_key" : "blank",
+    "message" : "must not be blank",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_min_3",
+  "input" : "日本",
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_short",
+    "message_key" : "too_short",
+    "message" : "must be at least 3 characters",
+    "meta" : {
+      "min" : 3,
+      "actual" : 2
+    }
+  } ]
+}, {
+  "decoder" : "string_min_3",
+  "input" : "日本語",
+  "ok" : "日本語"
+}, {
+  "decoder" : "string_max_3",
+  "input" : "abcd",
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_long",
+    "message_key" : "too_long",
+    "message" : "must be at most 3 characters",
+    "meta" : {
+      "max" : 3,
+      "actual" : 4
+    }
+  } ]
+}, {
+  "decoder" : "string_length_4",
+  "input" : "abc",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_length",
+    "message_key" : "invalid_length",
+    "message" : "must be exactly 4 characters",
+    "meta" : {
+      "expected" : 4,
+      "actual" : 3
+    }
+  } ]
+}, {
+  "decoder" : "string_one_of",
+  "input" : "c",
+  "issues" : [ {
+    "path" : "",
+    "code" : "not_allowed",
+    "message_key" : "not_allowed",
+    "message" : "must be one of [a, b]",
+    "meta" : {
+      "allowed" : [ "a", "b" ],
+      "actual" : "c"
+    }
+  } ]
+}, {
+  "decoder" : "string_one_of",
+  "input" : "a",
+  "ok" : "a"
+}, {
+  "decoder" : "string_starts_with",
+  "input" : "xab",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "must start with \"ab\"",
+    "meta" : {
+      "prefix" : "ab"
+    }
+  } ]
+}, {
+  "decoder" : "string_ends_with",
+  "input" : "abx",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "must end with \"ab\"",
+    "meta" : {
+      "suffix" : "ab"
+    }
+  } ]
+}, {
+  "decoder" : "string_contains",
+  "input" : "zzz",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "must include \"ab\"",
+    "meta" : {
+      "substring" : "ab"
+    }
+  } ]
+}, {
+  "decoder" : "string_ipv4",
+  "input" : "192.168.0.1",
+  "ok" : "192.168.0.1"
+}, {
+  "decoder" : "string_ipv4",
+  "input" : "192.168.00.1",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid IPv4 address",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "[2001:db8::1]",
+  "ok" : "[2001:db8::1]"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "2001:db8::g",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_ip",
+  "input" : "::1",
+  "ok" : "::1"
+}, {
+  "decoder" : "string_ip",
+  "input" : "localhost",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid IP address",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_ulid",
+  "input" : "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "ok" : "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+}, {
+  "decoder" : "string_ulid",
+  "input" : "01ARZ3NDEKTSV4RRFFQ69G5FAI",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid ULID",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_cuid",
+  "input" : "cjld2cjxh0000qzrmn831i7rn",
+  "ok" : "cjld2cjxh0000qzrmn831i7rn"
+}, {
+  "decoder" : "string_cuid",
+  "input" : "xjld2cjxh0000qzrmn831i7rn",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid CUID",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_pattern",
+  "input" : "abc1",
+  "ok" : "abc1"
+}, {
+  "decoder" : "string_pattern",
+  "input" : "abc1x",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "invalid format",
+    "meta" : {
+      "pattern" : "[a-z]+\\d"
+    }
+  } ]
+}, {
+  "decoder" : "string_uuid",
+  "input" : "123e4567-e89b-12d3-a456-426614174000",
+  "ok" : "123e4567-e89b-12d3-a456-426614174000"
+}, {
+  "decoder" : "string_uuid",
+  "input" : "not-a-uuid",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid UUID",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_url",
+  "input" : "https://example.com/a?b=c",
+  "ok" : "https://example.com/a?b=c"
+}, {
+  "decoder" : "string_url",
+  "input" : "ftp://example.com",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid URL",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_url",
+  "input" : "https://",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid URL",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "int",
+  "input" : 42,
+  "ok" : 42
+}, {
+  "decoder" : "int",
+  "input" : null,
+  "issues" : [ {
+    "path" : "",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "int",
+  "input" : "42",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "int",
+  "input" : 1.5,
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer"
+    }
+  } ]
+}, {
+  "decoder" : "int",
+  "input" : true,
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "boolean"
+    }
+  } ]
+}, {
+  "decoder" : "int_min_1",
+  "input" : 0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.minimum",
+    "message" : "must be at least 1",
+    "meta" : {
+      "min" : 1,
+      "actual" : 0
+    }
+  } ]
+}, {
+  "decoder" : "int_max_10",
+  "input" : 11,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.maximum",
+    "message" : "must be at most 10",
+    "meta" : {
+      "max" : 10,
+      "actual" : 11
+    }
+  } ]
+}, {
+  "decoder" : "int_range",
+  "input" : 200,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.range",
+    "message" : "must be between 0 and 150",
+    "meta" : {
+      "min" : 0,
+      "actual" : 200,
+      "max" : 150
+    }
+  } ]
+}, {
+  "decoder" : "int_range",
+  "input" : -1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.range",
+    "message" : "must be between 0 and 150",
+    "meta" : {
+      "min" : 0,
+      "actual" : -1,
+      "max" : 150
+    }
+  } ]
+}, {
+  "decoder" : "int_range",
+  "input" : 150,
+  "ok" : 150
+}, {
+  "decoder" : "int_positive",
+  "input" : 0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.positive",
+    "message" : "must be positive",
+    "meta" : {
+      "min" : 1,
+      "actual" : 0
+    }
+  } ]
+}, {
+  "decoder" : "int_negative",
+  "input" : 0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.negative",
+    "message" : "must be negative",
+    "meta" : {
+      "max" : -1,
+      "actual" : 0
+    }
+  } ]
+}, {
+  "decoder" : "int_non_negative",
+  "input" : -1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.non_negative",
+    "message" : "must be non-negative",
+    "meta" : {
+      "min" : 0,
+      "actual" : -1
+    }
+  } ]
+}, {
+  "decoder" : "int_non_positive",
+  "input" : 1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.non_positive",
+    "message" : "must be non-positive",
+    "meta" : {
+      "max" : 0,
+      "actual" : 1
+    }
+  } ]
+}, {
+  "decoder" : "int_multiple_of_3",
+  "input" : 4,
+  "issues" : [ {
+    "path" : "",
+    "code" : "not_multiple_of",
+    "message_key" : "not_multiple_of",
+    "message" : "must be a multiple of 3",
+    "meta" : {
+      "divisor" : 3,
+      "actual" : 4
+    }
+  } ]
+}, {
+  "decoder" : "int_one_of",
+  "input" : 2,
+  "issues" : [ {
+    "path" : "",
+    "code" : "not_allowed",
+    "message_key" : "not_allowed",
+    "message" : "must be one of [1, 3]",
+    "meta" : {
+      "allowed" : [ 1, 3 ],
+      "actual" : 2
+    }
+  } ]
+}, {
+  "decoder" : "long",
+  "input" : 9007199254740993,
+  "ok" : 9007199254740993
+}, {
+  "decoder" : "long",
+  "input" : "1",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected long",
+    "meta" : {
+      "expected" : "long",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "long",
+  "input" : 1.0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected long",
+    "meta" : {
+      "expected" : "long",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "double",
+  "input" : 1.25,
+  "ok" : 1.25
+}, {
+  "decoder" : "double",
+  "input" : 2,
+  "ok" : 2.0
+}, {
+  "decoder" : "double",
+  "input" : "1.0",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected double",
+    "meta" : {
+      "expected" : "double",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "double_positive",
+  "input" : 0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.positive",
+    "message" : "must be positive",
+    "meta" : {
+      "min" : 0.0,
+      "actual" : 0.0
+    }
+  } ]
+}, {
+  "decoder" : "double_negative",
+  "input" : 0.5,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.negative",
+    "message" : "must be negative",
+    "meta" : {
+      "max" : 0.0,
+      "actual" : 0.5
+    }
+  } ]
+}, {
+  "decoder" : "double_range",
+  "input" : 2.0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.range",
+    "message" : "must be between 0.5 and 1.5",
+    "meta" : {
+      "min" : 0.5,
+      "actual" : 2.0,
+      "max" : 1.5
+    }
+  } ]
+}, {
+  "decoder" : "double_min",
+  "input" : 0.25,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.minimum",
+    "message" : "must be at least 0.5",
+    "meta" : {
+      "min" : 0.5,
+      "actual" : 0.25
+    }
+  } ]
+}, {
+  "decoder" : "double_one_of",
+  "input" : 3.0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "not_allowed",
+    "message_key" : "not_allowed",
+    "message" : "must be one of [1.0, 2.0]",
+    "meta" : {
+      "allowed" : [ 1.0, 2.0 ],
+      "actual" : 3.0
+    }
+  } ]
+}, {
+  "decoder" : "decimal",
+  "input" : 12.5,
+  "ok" : 12.5
+}, {
+  "decoder" : "decimal",
+  "input" : "12.5",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected number",
+    "meta" : {
+      "expected" : "number",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "decimal_scale_2",
+  "input" : 1.125,
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_scale",
+    "message_key" : "invalid_scale",
+    "message" : "too many decimal places (max 2)",
+    "meta" : {
+      "actualScale" : 3,
+      "maxScale" : 2
+    }
+  } ]
+}, {
+  "decoder" : "decimal_positive",
+  "input" : 0,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.positive",
+    "message" : "must be positive",
+    "meta" : {
+      "min" : 0,
+      "actual" : 0
+    }
+  } ]
+}, {
+  "decoder" : "decimal_range",
+  "input" : 10.5,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.range",
+    "message" : "must be between 0 and 10",
+    "meta" : {
+      "min" : 0,
+      "actual" : 10.5,
+      "max" : 10
+    }
+  } ]
+}, {
+  "decoder" : "bool",
+  "input" : true,
+  "ok" : true
+}, {
+  "decoder" : "bool",
+  "input" : "true",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected boolean",
+    "meta" : {
+      "expected" : "boolean",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "bool",
+  "input" : null,
+  "issues" : [ {
+    "path" : "",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "bool_is_true",
+  "input" : false,
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_value",
+    "message_key" : "invalid_value",
+    "message" : "must be true",
+    "meta" : {
+      "expected" : true,
+      "actual" : false
+    }
+  } ]
+}, {
+  "decoder" : "list_int",
+  "input" : [ 1, 2, 3 ],
+  "ok" : [ 1, 2, 3 ]
+}, {
+  "decoder" : "list_int",
+  "input" : [ 1, "a", 3, null ],
+  "issues" : [ {
+    "path" : "/1",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  }, {
+    "path" : "/3",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "list_int",
+  "input" : {
+    "a" : 1
+  },
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected array",
+    "meta" : {
+      "expected" : "array",
+      "actual" : "object"
+    }
+  } ]
+}, {
+  "decoder" : "list_int",
+  "input" : null,
+  "issues" : [ {
+    "path" : "",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "list_non_empty",
+  "input" : [ ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_small",
+    "message_key" : "too_small.nonempty",
+    "message" : "must not be empty",
+    "meta" : {
+      "min" : 1,
+      "actual" : 0
+    }
+  } ]
+}, {
+  "decoder" : "list_min_2",
+  "input" : [ 1 ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_small",
+    "message_key" : "too_small",
+    "message" : "must have at least 2 elements",
+    "meta" : {
+      "min" : 2,
+      "actual" : 1
+    }
+  } ]
+}, {
+  "decoder" : "list_max_2",
+  "input" : [ 1, 2, 3 ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_big",
+    "message_key" : "too_big",
+    "message" : "must have at most 2 elements",
+    "meta" : {
+      "max" : 2,
+      "actual" : 3
+    }
+  } ]
+}, {
+  "decoder" : "list_size_2",
+  "input" : [ 1 ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_size",
+    "message_key" : "invalid_size",
+    "message" : "must have exactly 2 elements",
+    "meta" : {
+      "expected" : 2,
+      "actual" : 1
+    }
+  } ]
+}, {
+  "decoder" : "list_unique",
+  "input" : [ 1, 2, 1, 3, 2, 1 ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "duplicate_element",
+    "message_key" : "duplicate_element",
+    "message" : "must not contain duplicates: [1, 2]",
+    "meta" : {
+      "duplicates" : [ 1, 2 ]
+    }
+  } ]
+}, {
+  "decoder" : "person",
+  "input" : {
+    "name" : "Ken",
+    "age" : 30
+  },
+  "ok" : [ "Ken", 30 ]
+}, {
+  "decoder" : "person",
+  "input" : { },
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  }, {
+    "path" : "/age",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "person",
+  "input" : {
+    "name" : 1,
+    "age" : "x"
+  },
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected string",
+    "meta" : {
+      "expected" : "string",
+      "actual" : "number"
+    }
+  }, {
+    "path" : "/age",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "person",
+  "input" : [ 1 ],
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "array"
+    }
+  }, {
+    "path" : "/age",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "array"
+    }
+  } ]
+}, {
+  "decoder" : "person",
+  "input" : null,
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "null"
+    }
+  }, {
+    "path" : "/age",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "null"
+    }
+  } ]
+}, {
+  "decoder" : "person",
+  "input" : "str",
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "string"
+    }
+  }, {
+    "path" : "/age",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "person_strict",
+  "input" : {
+    "name" : "Ken",
+    "age" : 30,
+    "zeta" : 1,
+    "alpha" : 2
+  },
+  "issues" : [ {
+    "path" : "/zeta",
+    "code" : "unknown_field",
+    "message_key" : "unknown_field",
+    "message" : "unknown field",
+    "meta" : {
+      "field" : "zeta"
+    }
+  }, {
+    "path" : "/alpha",
+    "code" : "unknown_field",
+    "message_key" : "unknown_field",
+    "message" : "unknown field",
+    "meta" : {
+      "field" : "alpha"
+    }
+  } ]
+}, {
+  "decoder" : "person_strict",
+  "input" : {
+    "name" : 1,
+    "age" : 30,
+    "extra" : true
+  },
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected string",
+    "meta" : {
+      "expected" : "string",
+      "actual" : "number"
+    }
+  }, {
+    "path" : "/extra",
+    "code" : "unknown_field",
+    "message_key" : "unknown_field",
+    "message" : "unknown field",
+    "meta" : {
+      "field" : "extra"
+    }
+  } ]
+}, {
+  "decoder" : "person_strict",
+  "input" : [ 1 ],
+  "issues" : [ {
+    "path" : "/name",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "array"
+    }
+  }, {
+    "path" : "/age",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "array"
+    }
+  } ]
+}, {
+  "decoder" : "escaped_keys",
+  "input" : { },
+  "issues" : [ {
+    "path" : "/a/b",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  }, {
+    "path" : "/~c",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "optional",
+  "input" : {
+    "id" : 1
+  },
+  "ok" : [ 1, null ]
+}, {
+  "decoder" : "optional",
+  "input" : {
+    "id" : 1,
+    "nick" : "k"
+  },
+  "ok" : [ 1, "k" ]
+}, {
+  "decoder" : "optional",
+  "input" : {
+    "id" : 1,
+    "nick" : null
+  },
+  "issues" : [ {
+    "path" : "/nick",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "optional",
+  "input" : {
+    "id" : 1,
+    "nick" : 3
+  },
+  "issues" : [ {
+    "path" : "/nick",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected string",
+    "meta" : {
+      "expected" : "string",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "nullable",
+  "input" : {
+    "id" : 1,
+    "note" : null
+  },
+  "ok" : [ 1, null ]
+}, {
+  "decoder" : "nullable",
+  "input" : {
+    "id" : 1
+  },
+  "issues" : [ {
+    "path" : "/note",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "nullable",
+  "input" : {
+    "id" : 1,
+    "note" : "x"
+  },
+  "ok" : [ 1, "x" ]
+}, {
+  "decoder" : "presence",
+  "input" : {
+    "id" : 1
+  },
+  "ok" : [ 1, "absent" ]
+}, {
+  "decoder" : "presence",
+  "input" : {
+    "id" : 1,
+    "n" : null
+  },
+  "ok" : [ 1, "null" ]
+}, {
+  "decoder" : "presence",
+  "input" : {
+    "id" : 1,
+    "n" : 5
+  },
+  "ok" : [ 1, {
+    "present" : 5
+  } ]
+}, {
+  "decoder" : "presence",
+  "input" : {
+    "id" : 1,
+    "n" : "x"
+  },
+  "issues" : [ {
+    "path" : "/n",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "nested",
+  "input" : {
+    "items" : [ {
+      "name" : "a",
+      "qty" : 1
+    }, {
+      "qty" : "x"
+    }, {
+      "name" : "",
+      "qty" : 0
+    } ]
+  },
+  "issues" : [ {
+    "path" : "/items/1/name",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  }, {
+    "path" : "/items/1/qty",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  }, {
+    "path" : "/items/2/name",
+    "code" : "blank",
+    "message_key" : "blank",
+    "message" : "must not be blank",
+    "meta" : { }
+  }, {
+    "path" : "/items/2/qty",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.positive",
+    "message" : "must be positive",
+    "meta" : {
+      "min" : 1,
+      "actual" : 0
+    }
+  } ]
+}, {
+  "decoder" : "nested",
+  "input" : {
+    "items" : "x"
+  },
+  "issues" : [ {
+    "path" : "/items",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected array",
+    "meta" : {
+      "expected" : "array",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "dict",
+  "input" : {
+    "a" : 1,
+    "b" : "x",
+    "c" : 3
+  },
+  "issues" : [ {
+    "path" : "/b",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "dict",
+  "input" : [ 1 ],
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
+      "actual" : "array"
+    }
+  } ]
+}, {
+  "decoder" : "enum",
+  "input" : "RED",
+  "ok" : "red"
+}, {
+  "decoder" : "enum",
+  "input" : "blue",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "invalid value",
+    "meta" : {
+      "allowed" : [ "red", "green" ]
+    }
+  } ]
+}, {
+  "decoder" : "enum",
+  "input" : 1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected string",
+    "meta" : {
+      "expected" : "string",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "literal",
+  "input" : "v1",
+  "ok" : "v1"
+}, {
+  "decoder" : "literal",
+  "input" : "v2",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "invalid value",
+    "meta" : {
+      "expected" : "v1"
+    }
+  } ]
+}, {
+  "decoder" : "shape",
+  "input" : {
+    "kind" : "rect",
+    "w" : 2,
+    "h" : 3
+  },
+  "ok" : 6
+}, {
+  "decoder" : "shape",
+  "input" : {
+    "kind" : "circle"
+  },
+  "issues" : [ {
+    "path" : "/kind",
+    "code" : "not_allowed",
+    "message_key" : "not_allowed",
+    "message" : "must be one of [rect, square]",
+    "meta" : {
+      "allowed" : [ "rect", "square" ]
+    }
+  } ]
+}, {
+  "decoder" : "shape",
+  "input" : { },
+  "issues" : [ {
+    "path" : "/kind",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "shape",
+  "input" : {
+    "kind" : "rect",
+    "w" : "2"
+  },
+  "issues" : [ {
+    "path" : "/w",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  }, {
+    "path" : "/h",
+    "code" : "required",
+    "message_key" : "required",
+    "message" : "is required",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "one_of",
+  "input" : 5,
+  "ok" : "5"
+}, {
+  "decoder" : "one_of",
+  "input" : "abc",
+  "ok" : "abc"
+}, {
+  "decoder" : "one_of",
+  "input" : "ab",
+  "issues" : [ {
+    "path" : "",
+    "code" : "one_of_failed",
+    "message_key" : "one_of_failed",
+    "message" : "no variant matched",
+    "meta" : {
+      "candidates" : [ {
+        "issues" : [ {
+          "path" : "",
+          "code" : "type_mismatch",
+          "message" : "expected integer",
+          "meta" : {
+            "expected" : "integer",
+            "actual" : "string"
+          }
+        } ],
+        "candidate" : 0
+      }, {
+        "issues" : [ {
+          "path" : "",
+          "code" : "too_short",
+          "message" : "must be at least 3 characters",
+          "meta" : {
+            "min" : 3,
+            "actual" : 2
+          }
+        } ],
+        "candidate" : 1
+      } ]
+    }
+  } ]
+}, {
+  "decoder" : "with_default",
+  "input" : { },
+  "ok" : [ 0, 1 ]
+}, {
+  "decoder" : "with_default",
+  "input" : {
+    "page" : null
+  },
+  "ok" : [ 0, 1 ]
+}, {
+  "decoder" : "with_default",
+  "input" : {
+    "page" : "x"
+  },
+  "issues" : [ {
+    "path" : "/page",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "recover",
+  "input" : {
+    "page" : "x"
+  },
+  "ok" : [ 0, 1 ]
+}, {
+  "decoder" : "period",
+  "input" : {
+    "start" : 1,
+    "end" : 2
+  },
+  "ok" : [ 1, 2 ]
+}, {
+  "decoder" : "period",
+  "input" : {
+    "start" : 3,
+    "end" : 2
+  },
+  "issues" : [ {
+    "path" : "/end",
+    "code" : "invalid_value",
+    "message_key" : "invalid_value",
+    "message" : "end is before start",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "period",
+  "input" : {
+    "start" : "a",
+    "end" : "b"
+  },
+  "issues" : [ {
+    "path" : "/start",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  }, {
+    "path" : "/end",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected integer",
+    "meta" : {
+      "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+} ]
