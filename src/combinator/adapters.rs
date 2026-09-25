@@ -114,8 +114,8 @@ where
         if (self.predicate)(&value) {
             Ok(value)
         } else {
-            Err(Issue::new(self.code.clone(), "")
-                .with_custom_message(self.message.clone())
+            Err(Issue::new(self.code.clone())
+                .with_message(self.message.clone())
                 .at(path.to_pointer())
                 .into())
         }

@@ -37,10 +37,10 @@ pub use string::UrlDecoder;
 pub use string::UuidDecoder;
 pub use string::{Parse, StringDecoder, string};
 
-use crate::codes;
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
+use crate::{codes, message_keys};
 use serde_json::Value;
 
 /// Everything needed to write decoders over JSON.
@@ -79,7 +79,8 @@ pub fn is_missing(value: &Value) -> bool {
 /// ```
 pub fn from_str<D: Decoder<Value>>(decoder: &D, text: &str) -> Result<D::Output, Issues> {
     let value: Value = serde_json::from_str(text).map_err(|e| {
-        Issue::new(codes::INVALID_FORMAT, "not valid JSON")
+        Issue::new(codes::INVALID_FORMAT)
+            .with_message_key(message_keys::INVALID_FORMAT_JSON)
             .with_meta("line", e.line())
             .with_meta("column", e.column())
     })?;
@@ -100,11 +101,11 @@ pub(crate) fn node_type(value: &Value) -> &'static str {
 }
 
 pub(crate) fn required(path: &Path<'_>) -> Issue {
-    Issue::at_path(path, codes::REQUIRED, "is required")
+    Issue::at_path(path, codes::REQUIRED)
 }
 
 pub(crate) fn type_mismatch(path: &Path<'_>, expected: &'static str, found: &Value) -> Issue {
-    Issue::at_path(path, codes::TYPE_MISMATCH, format!("expected {expected}"))
+    Issue::at_path(path, codes::TYPE_MISMATCH)
         .with_meta("expected", expected)
         .with_meta("actual", node_type(found))
 }

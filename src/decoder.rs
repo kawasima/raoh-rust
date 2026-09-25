@@ -62,7 +62,7 @@ pub trait Decoder<I: ?Sized> {
     /// impl Period {
     ///     fn new(start: i64, end: i64) -> Result<Self, Issue> {
     ///         if start > end {
-    ///             return Err(Issue::new("invalid_value", "start must not be after end"));
+    ///             return Err(Issue::new("invalid_value").with_message("start must not be after end"));
     ///         }
     ///         Ok(Self { start, end })
     ///     }
@@ -170,7 +170,7 @@ impl<I: ?Sized, D: Decoder<I> + ?Sized> Decoder<I> for std::sync::Arc<D> {
 /// use raoh::{decoder_fn, Decoder, Issue};
 ///
 /// let even = decoder_fn(|n: &i64, _path| {
-///     if n % 2 == 0 { Ok(*n) } else { Err(Issue::new("odd", "must be even").into()) }
+///     if n % 2 == 0 { Ok(*n) } else { Err(Issue::new("odd").with_message("must be even").into()) }
 /// });
 /// assert!(even.decode(&3).is_err());
 /// ```

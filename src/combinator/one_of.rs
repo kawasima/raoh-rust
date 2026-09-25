@@ -28,12 +28,18 @@ pub fn one_of<A>(alternatives: A) -> OneOf<A> {
 #[derive(Clone, Copy, Debug)]
 pub struct OneOf<A>(A);
 
-/// A tuple of decoders over the same input with the same output, tried in order.
-pub trait Alternatives<I: ?Sized> {
+mod sealed {
+    pub trait Sealed<I: ?Sized> {}
+}
+
+/// A tuple of decoders over the same input with the same output, tried in order. It cannot be
+/// implemented outside this crate.
+pub trait Alternatives<I: ?Sized>: sealed::Sealed<I> {
     /// What each alternative gives.
     type Output;
 
     /// The first success, or every alternative's issues in order.
+    #[doc(hidden)]
     fn first_success(&self, input: &I, path: &Path<'_>) -> Result<Self::Output, Vec<Issues>>;
 }
 
@@ -52,7 +58,7 @@ impl<I: ?Sized, A: Alternatives<I>> Decoder<I> for OneOf<A> {
                     Value::Object(candidate)
                 })
                 .collect();
-            Issue::at_path(path, codes::ONE_OF_FAILED, "no variant matched")
+            Issue::at_path(path, codes::ONE_OF_FAILED)
                 .with_meta("candidates", candidates)
                 .into()
         })
@@ -61,6 +67,11 @@ impl<I: ?Sized, A: Alternatives<I>> Decoder<I> for OneOf<A> {
 
 macro_rules! alternatives {
     ($First:ident $first:tt $(, $T:ident $idx:tt)*) => {
+        impl<I: ?Sized, $First: Decoder<I>, $($T: Decoder<I, Output = $First::Output>),*>
+            sealed::Sealed<I> for ($First, $($T,)*)
+        {
+        }
+
         impl<I: ?Sized, $First: Decoder<I>, $($T: Decoder<I, Output = $First::Output>),*>
             Alternatives<I> for ($First, $($T,)*)
         {

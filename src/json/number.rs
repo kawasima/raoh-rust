@@ -5,7 +5,6 @@ use crate::issue::{Issue, Issues};
 use crate::path::Path;
 use crate::{codes, message_keys};
 use serde_json::Value;
-use std::fmt::Display;
 use std::ops::RangeInclusive;
 
 mod sealed {
@@ -16,10 +15,9 @@ mod sealed {
     impl Sealed for u64 {}
 }
 
-/// An integer type a JSON number can be decoded into.
-pub trait Integer:
-    sealed::Sealed + Copy + Ord + Display + Into<Value> + Send + Sync + 'static
-{
+/// An integer type a JSON number can be decoded into. It cannot be implemented outside this
+/// crate.
+pub trait Integer: sealed::Sealed + Copy + Ord + Into<Value> + Send + Sync + 'static {
     /// What an issue names the type in `expected`, as Raoh for Java does.
     const EXPECTED: &'static str;
     /// Whether a number that is not an integer of this type is reported with `actual`, as Raoh
@@ -29,6 +27,10 @@ pub trait Integer:
     const ONE: Self;
 
     /// The value of `n`, if it is an integer this type holds.
+    ///
+    /// `serde_json` reads the text `-0` as the float `-0.0`; it is read here as the integer 0, as
+    /// Jackson reads it. The text `-0.0` gives the same float and is read as 0 too, where Raoh for
+    /// Java rejects it.
     fn from_number(n: &serde_json::Number) -> Option<Self>;
 
     /// Whether `self` is a multiple of `divisor`, which is not zero.
@@ -38,12 +40,17 @@ pub trait Integer:
     fn is_zero(self) -> bool;
 }
 
-/// An integer type that holds negative values.
+/// An integer type that holds negative values. It cannot be implemented outside this crate.
 pub trait SignedInteger: Integer {
     /// Zero.
     const ZERO: Self;
     /// The largest negative value.
     const MINUS_ONE: Self;
+}
+
+fn is_negative_zero(n: &serde_json::Number) -> bool {
+    n.as_f64()
+        .is_some_and(|f| n.is_f64() && f == 0.0 && f.is_sign_negative())
 }
 
 macro_rules! integer {
@@ -54,7 +61,9 @@ macro_rules! integer {
             const ONE: Self = 1;
 
             fn from_number(n: &serde_json::Number) -> Option<Self> {
-                n.$via().and_then(|v| <$t>::try_from(v).ok())
+                n.$via()
+                    .or_else(|| is_negative_zero(n).then_some(0))
+                    .and_then(|v| <$t>::try_from(v).ok())
             }
 
             fn is_multiple_of(self, divisor: Self) -> bool {
@@ -88,8 +97,8 @@ impl SignedInteger for i64 {
 /// Missing or `null` is `required`. A value of another type, a number with a fraction or an
 /// exponent, and an integer `T` cannot hold are `type_mismatch`. The type found is named in
 /// `actual` for a value of another type, and for a number too when `T` is `i64` or `u64`, as
-/// Raoh for Java does for `int_()` and `long_()`. Constraints run in the order they are written, and the first to fail is the
-/// one reported.
+/// Raoh for Java does for `int_()` and `long_()`. Constraints run in the order they are written,
+/// and the first to fail is the one reported.
 #[derive(Clone, Debug)]
 pub struct IntDecoder<T> {
     steps: Steps<T>,
@@ -123,18 +132,17 @@ pub fn u64() -> IntDecoder<u64> {
     IntDecoder::default()
 }
 
+fn type_mismatch(path: &Path<'_>, expected: &'static str) -> Issue {
+    Issue::at_path(path, codes::TYPE_MISMATCH).with_meta("expected", expected)
+}
+
 impl<T: Integer> Decoder<Value> for IntDecoder<T> {
     type Output = T;
 
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
         let found = match input {
             Value::Number(n) => T::from_number(n).ok_or_else(|| {
-                let issue = Issue::at_path(
-                    path,
-                    codes::TYPE_MISMATCH,
-                    format!("expected {}", T::EXPECTED),
-                )
-                .with_meta("expected", T::EXPECTED);
+                let issue = type_mismatch(path, T::EXPECTED);
                 if T::NUMBER_HAS_ACTUAL {
                     issue.with_meta("actual", "number")
                 } else {
@@ -142,26 +150,20 @@ impl<T: Integer> Decoder<Value> for IntDecoder<T> {
                 }
             }),
             Value::Null => Err(required(path)),
-            other => Err(Issue::at_path(
-                path,
-                codes::TYPE_MISMATCH,
-                format!("expected {}", T::EXPECTED),
-            )
-            .with_meta("expected", T::EXPECTED)
-            .with_meta("actual", node_type(other))),
+            other => Err(type_mismatch(path, T::EXPECTED).with_meta("actual", node_type(other))),
         };
         let value = found.map_err(|issue| self.steps.base_issue(issue))?;
         self.steps.run(value, path)
     }
 }
 
-fn out_of_range(key: &'static str, message: String) -> Issue {
-    Issue::new(codes::OUT_OF_RANGE, message).with_message_key(key)
+fn out_of_range(key: &'static str) -> Issue {
+    Issue::new(codes::OUT_OF_RANGE).with_message_key(key)
 }
 
 impl<T: Integer> IntDecoder<T> {
-    /// Gives the constraint written just before this, or the type check when there is none, a
-    /// custom message that no resolver rewrites.
+    /// Gives the most recent constraint written before this, or the type check when there is
+    /// none, a custom message that every language shows as written.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.steps.set_message(message.into());
         self
@@ -172,12 +174,9 @@ impl<T: Integer> IntDecoder<T> {
         self.steps.require(
             move |v| *v >= min,
             move |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_MINIMUM,
-                    format!("must be at least {min}"),
-                )
-                .with_meta("min", min)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_MINIMUM)
+                    .with_meta("min", min)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -188,12 +187,9 @@ impl<T: Integer> IntDecoder<T> {
         self.steps.require(
             move |v| *v <= max,
             move |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_MAXIMUM,
-                    format!("must be at most {max}"),
-                )
-                .with_meta("max", max)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_MAXIMUM)
+                    .with_meta("max", max)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -206,13 +202,10 @@ impl<T: Integer> IntDecoder<T> {
         self.steps.require(
             move |v| min <= *v && *v <= max,
             move |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_RANGE,
-                    format!("must be between {min} and {max}"),
-                )
-                .with_meta("min", min)
-                .with_meta("max", max)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_RANGE)
+                    .with_meta("min", min)
+                    .with_meta("max", max)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -223,12 +216,9 @@ impl<T: Integer> IntDecoder<T> {
         self.steps.require(
             |v| *v >= T::ONE,
             |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_POSITIVE,
-                    "must be positive".into(),
-                )
-                .with_meta("min", T::ONE)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_POSITIVE)
+                    .with_meta("min", T::ONE)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -244,12 +234,9 @@ impl<T: Integer> IntDecoder<T> {
         self.steps.require(
             move |v| v.is_multiple_of(divisor),
             move |v| {
-                Issue::new(
-                    codes::NOT_MULTIPLE_OF,
-                    format!("must be a multiple of {divisor}"),
-                )
-                .with_meta("divisor", divisor)
-                .with_meta("actual", *v)
+                Issue::new(codes::NOT_MULTIPLE_OF)
+                    .with_meta("divisor", divisor)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -260,13 +247,11 @@ impl<T: Integer> IntDecoder<T> {
         let mut allowed: Vec<T> = allowed.into_iter().collect();
         allowed.sort();
         allowed.dedup();
-        let listed: Vec<String> = allowed.iter().map(ToString::to_string).collect();
-        let message = format!("must be one of [{}]", listed.join(", "));
         let check = allowed.clone();
         self.steps.require(
             move |v| check.binary_search(v).is_ok(),
             move |v| {
-                Issue::new(codes::NOT_ALLOWED, message.clone())
+                Issue::new(codes::NOT_ALLOWED)
                     .with_meta(
                         "allowed",
                         allowed.iter().map(|a| (*a).into()).collect::<Vec<Value>>(),
@@ -284,12 +269,9 @@ impl<T: SignedInteger> IntDecoder<T> {
         self.steps.require(
             |v| *v <= T::MINUS_ONE,
             |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_NEGATIVE,
-                    "must be negative".into(),
-                )
-                .with_meta("max", T::MINUS_ONE)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_NEGATIVE)
+                    .with_meta("max", T::MINUS_ONE)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -300,12 +282,9 @@ impl<T: SignedInteger> IntDecoder<T> {
         self.steps.require(
             |v| *v >= T::ZERO,
             |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_NON_NEGATIVE,
-                    "must be non-negative".into(),
-                )
-                .with_meta("min", T::ZERO)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_NON_NEGATIVE)
+                    .with_meta("min", T::ZERO)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -316,12 +295,9 @@ impl<T: SignedInteger> IntDecoder<T> {
         self.steps.require(
             |v| *v <= T::ZERO,
             |v| {
-                out_of_range(
-                    message_keys::OUT_OF_RANGE_NON_POSITIVE,
-                    "must be non-positive".into(),
-                )
-                .with_meta("max", T::ZERO)
-                .with_meta("actual", *v)
+                out_of_range(message_keys::OUT_OF_RANGE_NON_POSITIVE)
+                    .with_meta("max", T::ZERO)
+                    .with_meta("actual", *v)
             },
         );
         self
@@ -331,7 +307,8 @@ impl<T: SignedInteger> IntDecoder<T> {
 /// A decoder of a JSON number into an `f64`.
 ///
 /// Missing or `null` is `required`; any other type is `type_mismatch`. An integer is read as the
-/// nearest `f64`.
+/// nearest `f64`. Bounds appear in messages as Java's `Double.toString` writes them, such as
+/// `1.0E7`.
 #[derive(Clone, Debug, Default)]
 pub struct F64Decoder {
     steps: Steps<f64>,
@@ -347,16 +324,12 @@ impl Decoder<Value> for F64Decoder {
 
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<f64, Issues> {
         let found = match input {
-            Value::Number(n) => n.as_f64().filter(|v| v.is_finite()).ok_or_else(|| {
-                Issue::at_path(path, codes::TYPE_MISMATCH, "expected double")
-                    .with_meta("expected", "double")
-            }),
+            Value::Number(n) => n
+                .as_f64()
+                .filter(|v| v.is_finite())
+                .ok_or_else(|| type_mismatch(path, "double")),
             Value::Null => Err(required(path)),
-            other => Err(
-                Issue::at_path(path, codes::TYPE_MISMATCH, "expected double")
-                    .with_meta("expected", "double")
-                    .with_meta("actual", node_type(other)),
-            ),
+            other => Err(type_mismatch(path, "double").with_meta("actual", node_type(other))),
         };
         let value = found.map_err(|issue| self.steps.base_issue(issue))?;
         self.steps.run(value, path)
@@ -368,7 +341,6 @@ impl F64Decoder {
         mut self,
         ok: impl Fn(f64) -> bool + Send + Sync + 'static,
         key: &'static str,
-        message: String,
         bounds: Vec<(&'static str, f64)>,
     ) -> Self {
         self.steps.require(
@@ -376,18 +348,17 @@ impl F64Decoder {
             move |v| {
                 bounds
                     .iter()
-                    .fold(
-                        out_of_range(key, message.clone()),
-                        |issue, (name, bound)| issue.with_meta(*name, *bound),
-                    )
+                    .fold(out_of_range(key), |issue, (name, bound)| {
+                        issue.with_meta(*name, *bound)
+                    })
                     .with_meta("actual", *v)
             },
         );
         self
     }
 
-    /// Gives the constraint written just before this, or the type check when there is none, a
-    /// custom message that no resolver rewrites.
+    /// Gives the most recent constraint written before this, or the type check when there is
+    /// none, a custom message that every language shows as written.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.steps.set_message(message.into());
         self
@@ -398,7 +369,6 @@ impl F64Decoder {
         self.bound(
             move |v| v >= min,
             message_keys::OUT_OF_RANGE_MINIMUM,
-            format!("must be at least {min:?}"),
             vec![("min", min)],
         )
     }
@@ -408,7 +378,6 @@ impl F64Decoder {
         self.bound(
             move |v| v <= max,
             message_keys::OUT_OF_RANGE_MAXIMUM,
-            format!("must be at most {max:?}"),
             vec![("max", max)],
         )
     }
@@ -420,7 +389,6 @@ impl F64Decoder {
         self.bound(
             move |v| min <= v && v <= max,
             message_keys::OUT_OF_RANGE_RANGE,
-            format!("must be between {min:?} and {max:?}"),
             vec![("min", min), ("max", max)],
         )
     }
@@ -430,7 +398,6 @@ impl F64Decoder {
         self.bound(
             |v| v > 0.0,
             message_keys::OUT_OF_RANGE_POSITIVE,
-            "must be positive".into(),
             vec![("min", 0.0)],
         )
     }
@@ -440,7 +407,6 @@ impl F64Decoder {
         self.bound(
             |v| v < 0.0,
             message_keys::OUT_OF_RANGE_NEGATIVE,
-            "must be negative".into(),
             vec![("max", 0.0)],
         )
     }
@@ -450,7 +416,6 @@ impl F64Decoder {
         self.bound(
             |v| v >= 0.0,
             message_keys::OUT_OF_RANGE_NON_NEGATIVE,
-            "must be non-negative".into(),
             vec![("min", 0.0)],
         )
     }
@@ -460,7 +425,6 @@ impl F64Decoder {
         self.bound(
             |v| v <= 0.0,
             message_keys::OUT_OF_RANGE_NON_POSITIVE,
-            "must be non-positive".into(),
             vec![("max", 0.0)],
         )
     }
@@ -470,13 +434,11 @@ impl F64Decoder {
         let mut allowed: Vec<f64> = allowed.into_iter().collect();
         allowed.sort_by(f64::total_cmp);
         allowed.dedup();
-        let listed: Vec<String> = allowed.iter().map(|a| format!("{a:?}")).collect();
-        let message = format!("must be one of [{}]", listed.join(", "));
         let check = allowed.clone();
         self.steps.require(
             move |v| check.contains(v),
             move |v| {
-                Issue::new(codes::NOT_ALLOWED, message.clone())
+                Issue::new(codes::NOT_ALLOWED)
                     .with_meta("allowed", allowed.clone())
                     .with_meta("actual", *v)
             },
@@ -519,6 +481,13 @@ mod tests {
     }
 
     #[test]
+    fn negative_zero_text_is_the_integer_zero() {
+        let minus_zero: Value = serde_json::from_str("-0").unwrap();
+        assert_eq!(i64().decode(&minus_zero).unwrap(), 0);
+        assert_eq!(u32().decode(&minus_zero).unwrap(), 0);
+    }
+
+    #[test]
     fn range_reports_both_bounds() {
         let issue = first(u32().range(0..=150).decode(&json!(200)));
         assert_eq!(issue.message_key(), "out_of_range.range");
@@ -530,10 +499,8 @@ mod tests {
 
     #[test]
     fn signed_positive_and_negative_bounds_follow_java() {
-        let issue = first(i32().negative().decode(&json!(0)));
-        assert_eq!(issue.meta()["max"], -1);
-        let issue = first(i32().positive().decode(&json!(0)));
-        assert_eq!(issue.meta()["min"], 1);
+        assert_eq!(first(i32().negative().decode(&json!(0))).meta()["max"], -1);
+        assert_eq!(first(i32().positive().decode(&json!(0))).meta()["min"], 1);
     }
 
     #[test]
@@ -546,11 +513,13 @@ mod tests {
     }
 
     #[test]
-    fn f64_accepts_integers_and_rejects_strings() {
+    fn f64_bounds_are_written_as_java_writes_doubles() {
         assert_eq!(f64().decode(&json!(2)).unwrap(), 2.0);
-        let issue = first(f64().decode(&json!("2")));
-        assert_eq!(issue.meta()["actual"], "string");
-        let issue = first(f64().positive().decode(&json!(0)));
-        assert_eq!(issue.meta()["min"], 0.0);
+        assert_eq!(first(f64().decode(&json!("2"))).meta()["actual"], "string");
+        assert_eq!(first(f64().positive().decode(&json!(0))).meta()["min"], 0.0);
+        assert_eq!(
+            first(f64().min(1e7).decode(&json!(1))).message(),
+            "must be at least 1.0E7"
+        );
     }
 }

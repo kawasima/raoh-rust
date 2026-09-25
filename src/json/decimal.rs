@@ -17,6 +17,11 @@ use std::str::FromStr;
 ///
 /// Missing or `null` is `required`; any other type, and a number `Decimal` cannot hold, is
 /// `type_mismatch` with `expected` `number`.
+///
+/// Bounds are carried in `meta` as JSON numbers, which a message writes as Java writes a
+/// `double`. That matches how Raoh for Java writes a `BigDecimal` for values from 0.001 up to
+/// 10⁷; outside that range a fractional bound is written in exponent form, such as `1.50000005E7` for
+/// what Java writes `15000000.5`.
 #[derive(Clone, Debug, Default)]
 pub struct DecimalDecoder {
     steps: Steps<Decimal>,
@@ -45,15 +50,12 @@ impl Decoder<Value> for DecimalDecoder {
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Decimal, Issues> {
         let found = match input {
             Value::Number(n) => read(n).ok_or_else(|| {
-                Issue::at_path(path, codes::TYPE_MISMATCH, "expected number")
-                    .with_meta("expected", "number")
+                Issue::at_path(path, codes::TYPE_MISMATCH).with_meta("expected", "number")
             }),
             Value::Null => Err(required(path)),
-            other => Err(
-                Issue::at_path(path, codes::TYPE_MISMATCH, "expected number")
-                    .with_meta("expected", "number")
-                    .with_meta("actual", node_type(other)),
-            ),
+            other => Err(Issue::at_path(path, codes::TYPE_MISMATCH)
+                .with_meta("expected", "number")
+                .with_meta("actual", node_type(other))),
         };
         let value = found.map_err(|issue| self.steps.base_issue(issue))?;
         self.steps.run(value, path)
@@ -65,7 +67,6 @@ impl DecimalDecoder {
         mut self,
         ok: impl Fn(Decimal) -> bool + Send + Sync + 'static,
         key: &'static str,
-        message: String,
         bounds: Vec<(&'static str, Decimal)>,
     ) -> Self {
         self.steps.require(
@@ -74,7 +75,7 @@ impl DecimalDecoder {
                 bounds
                     .iter()
                     .fold(
-                        Issue::new(codes::OUT_OF_RANGE, message.clone()).with_message_key(key),
+                        Issue::new(codes::OUT_OF_RANGE).with_message_key(key),
                         |issue, (name, bound)| issue.with_meta(*name, to_json(*bound)),
                     )
                     .with_meta("actual", to_json(*v))
@@ -83,8 +84,8 @@ impl DecimalDecoder {
         self
     }
 
-    /// Gives the constraint written just before this, or the type check when there is none, a
-    /// custom message that no resolver rewrites.
+    /// Gives the most recent constraint written before this, or the type check when there is
+    /// none, a custom message that every language shows as written.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.steps.set_message(message.into());
         self
@@ -95,7 +96,6 @@ impl DecimalDecoder {
         self.bound(
             move |v| v >= min,
             message_keys::OUT_OF_RANGE_MINIMUM,
-            format!("must be at least {min}"),
             vec![("min", min)],
         )
     }
@@ -105,7 +105,6 @@ impl DecimalDecoder {
         self.bound(
             move |v| v <= max,
             message_keys::OUT_OF_RANGE_MAXIMUM,
-            format!("must be at most {max}"),
             vec![("max", max)],
         )
     }
@@ -117,7 +116,6 @@ impl DecimalDecoder {
         self.bound(
             move |v| min <= v && v <= max,
             message_keys::OUT_OF_RANGE_RANGE,
-            format!("must be between {min} and {max}"),
             vec![("min", min), ("max", max)],
         )
     }
@@ -127,7 +125,6 @@ impl DecimalDecoder {
         self.bound(
             |v| v > Decimal::ZERO,
             message_keys::OUT_OF_RANGE_POSITIVE,
-            "must be positive".into(),
             vec![("min", Decimal::ZERO)],
         )
     }
@@ -137,7 +134,6 @@ impl DecimalDecoder {
         self.bound(
             |v| v < Decimal::ZERO,
             message_keys::OUT_OF_RANGE_NEGATIVE,
-            "must be negative".into(),
             vec![("max", Decimal::ZERO)],
         )
     }
@@ -147,7 +143,6 @@ impl DecimalDecoder {
         self.bound(
             |v| v >= Decimal::ZERO,
             message_keys::OUT_OF_RANGE_NON_NEGATIVE,
-            "must be non-negative".into(),
             vec![("min", Decimal::ZERO)],
         )
     }
@@ -157,7 +152,6 @@ impl DecimalDecoder {
         self.bound(
             |v| v <= Decimal::ZERO,
             message_keys::OUT_OF_RANGE_NON_POSITIVE,
-            "must be non-positive".into(),
             vec![("max", Decimal::ZERO)],
         )
     }
@@ -172,12 +166,9 @@ impl DecimalDecoder {
         self.steps.require(
             move |v| (*v % divisor).is_zero(),
             move |v| {
-                Issue::new(
-                    codes::NOT_MULTIPLE_OF,
-                    format!("must be a multiple of {divisor}"),
-                )
-                .with_meta("divisor", to_json(divisor))
-                .with_meta("actual", to_json(*v))
+                Issue::new(codes::NOT_MULTIPLE_OF)
+                    .with_meta("divisor", to_json(divisor))
+                    .with_meta("actual", to_json(*v))
             },
         );
         self
@@ -189,12 +180,9 @@ impl DecimalDecoder {
         self.steps.require(
             move |v| v.scale() <= digits,
             move |v| {
-                Issue::new(
-                    codes::INVALID_SCALE,
-                    format!("too many decimal places (max {digits})"),
-                )
-                .with_meta("maxScale", digits)
-                .with_meta("actualScale", v.scale())
+                Issue::new(codes::INVALID_SCALE)
+                    .with_meta("maxScale", digits)
+                    .with_meta("actualScale", v.scale())
             },
         );
         self

@@ -2,24 +2,33 @@ use crate::issue::{Issue, Issues};
 use crate::path::Path;
 use std::sync::Arc;
 
+type Transform<T> = Arc<dyn Fn(T) -> T + Send + Sync>;
 type Check<T> = Arc<dyn Fn(T) -> Result<T, Issue> + Send + Sync>;
 
-struct Step<T> {
-    check: Check<T>,
-    message: Option<String>,
+/// One thing a built-in decoder does to its value: change it, which cannot fail, or check it,
+/// which can and may carry a custom message.
+enum Step<T> {
+    Transform(Transform<T>),
+    Constraint {
+        check: Check<T>,
+        message: Option<String>,
+    },
 }
 
 impl<T> Clone for Step<T> {
     fn clone(&self) -> Self {
-        Self {
-            check: Arc::clone(&self.check),
-            message: self.message.clone(),
+        match self {
+            Step::Transform(f) => Step::Transform(Arc::clone(f)),
+            Step::Constraint { check, message } => Step::Constraint {
+                check: Arc::clone(check),
+                message: message.clone(),
+            },
         }
     }
 }
 
-/// The constraints and transformations a built-in decoder applies to its value, in the order they
-/// were added. The first one to fail stops the rest.
+/// The transformations and constraints a built-in decoder applies to its value, in the order they
+/// were added. The first constraint to fail stops the rest.
 pub(crate) struct Steps<T> {
     steps: Vec<Step<T>>,
     base_message: Option<String>,
@@ -53,55 +62,64 @@ impl<T> Default for Steps<T> {
 }
 
 impl<T> Steps<T> {
-    /// Adds a step. An issue it returns is moved to the path the value was read at.
-    pub(crate) fn push(&mut self, check: impl Fn(T) -> Result<T, Issue> + Send + Sync + 'static) {
-        self.steps.push(Step {
-            check: Arc::new(check),
-            message: None,
-        });
+    /// Adds a transformation.
+    pub(crate) fn transform(&mut self, f: impl Fn(T) -> T + Send + Sync + 'static) {
+        self.steps.push(Step::Transform(Arc::new(f)));
     }
 
-    /// Adds a step that fails when `ok` does not hold, with the issue `fail` makes.
+    /// Adds a constraint that fails when `ok` does not hold, with the issue `fail` makes. The
+    /// issue is moved to the path the value was read at.
     pub(crate) fn require(
         &mut self,
         ok: impl Fn(&T) -> bool + Send + Sync + 'static,
         fail: impl Fn(&T) -> Issue + Send + Sync + 'static,
     ) {
-        self.push(move |value| {
+        let check = move |value: T| {
             if ok(&value) {
                 Ok(value)
             } else {
                 Err(fail(&value))
             }
+        };
+        self.steps.push(Step::Constraint {
+            check: Arc::new(check),
+            message: None,
         });
     }
 
-    /// Gives the most recent step, or the type check when there is none, a custom message.
-    pub(crate) fn set_message(&mut self, message: String) {
-        match self.steps.last_mut() {
-            Some(step) => step.message = Some(message),
-            None => self.base_message = Some(message),
+    /// Gives the most recent constraint, or the type check when there is none, a custom message.
+    /// Transformations are passed over: they cannot fail, so a message on one would never show.
+    pub(crate) fn set_message(&mut self, custom: String) {
+        let latest = self.steps.iter_mut().rev().find_map(|step| match step {
+            Step::Constraint { message, .. } => Some(message),
+            Step::Transform(_) => None,
+        });
+        match latest {
+            Some(message) => *message = Some(custom),
+            None => self.base_message = Some(custom),
         }
     }
 
     /// An issue of the type check, with its custom message if one was given.
     pub(crate) fn base_issue(&self, issue: Issue) -> Issues {
-        match &self.base_message {
-            Some(message) => issue.with_custom_message(message.clone()).into(),
-            None => issue.into(),
-        }
+        with_custom(issue, &self.base_message).into()
     }
 
     pub(crate) fn run(&self, mut value: T, path: &Path<'_>) -> Result<T, Issues> {
         for step in &self.steps {
-            value = (step.check)(value).map_err(|issue| {
-                let issue = issue.at(path.to_pointer());
-                match &step.message {
-                    Some(message) => issue.with_custom_message(message.clone()),
-                    None => issue,
-                }
-            })?;
+            value = match step {
+                Step::Transform(f) => f(value),
+                Step::Constraint { check, message } => check(value)
+                    .map_err(|issue| with_custom(issue.at(path.to_pointer()), message))?,
+            };
         }
         Ok(value)
+    }
+}
+
+fn with_custom(issue: Issue, message: &Option<String>) -> Issue {
+    match message {
+        Some(message) => issue.with_message(message.clone()),
+        None => issue,
     }
 }

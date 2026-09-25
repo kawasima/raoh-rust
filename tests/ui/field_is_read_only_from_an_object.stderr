@@ -1,0 +1,20 @@
+error[E0599]: no method named `decode` found for struct `raoh::json::Field<D>` in the current scope
+ --> tests/ui/field_is_read_only_from_an_object.rs:4:31
+  |
+4 |     let _ = field("a", i64()).decode(&json!({"a": 1}));
+  |                               ^^^^^^ method not found in `raoh::json::Field<IntDecoder<i64>>`
+
+error[E0599]: the method `decode` exists for tuple `(raoh::json::Field<IntDecoder<i64>>, raoh::json::Field<IntDecoder<i64>>)`, but its trait bounds were not satisfied
+ --> tests/ui/field_is_read_only_from_an_object.rs:5:52
+  |
+5 |     let _ = (field("a", i64()), field("b", i64())).decode(&json!({"a": 1, "b": 2}));
+  |                                                    ^^^^^^ method cannot be called due to unsatisfied trait bounds
+  |
+ ::: src/json/object.rs
+  |
+  | pub struct Field<D> {
+  | ------------------- doesn't satisfy `_: Decoder<_>`
+  |
+  = note: the following trait bounds were not satisfied:
+          `raoh::json::Field<IntDecoder<i64>>: raoh::Decoder<_>`
+          which is required by `(raoh::json::Field<IntDecoder<i64>>, raoh::json::Field<IntDecoder<i64>>): raoh::Decoder<_>`

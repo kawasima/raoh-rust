@@ -1,15 +1,17 @@
-use super::object::{Field, field};
+use super::object::{Field, Object, field, object};
 use super::string::{StringDecoder, string};
-use crate::codes;
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
+use crate::java;
 use crate::path::Path;
+use crate::{codes, message_keys};
 use serde_json::Value;
 use std::borrow::Cow;
 
 /// A decoder of a JSON string naming one of `variants`, matched without regard to case.
 ///
-/// A string naming none is `invalid_format` with the names, in the order given, as `allowed`.
+/// A string naming none is `invalid_format` with the names, lower-cased and in the order given,
+/// as `allowed`.
 ///
 /// ```
 /// use raoh::json::prelude::*;
@@ -47,7 +49,8 @@ impl<T: Clone> Decoder<Value> for EnumOf<T> {
             .find(|(candidate, _)| *candidate == name)
             .map(|(_, value)| value.clone())
             .ok_or_else(|| {
-                Issue::at_path(path, codes::INVALID_FORMAT, "invalid value")
+                Issue::at_path(path, codes::INVALID_FORMAT)
+                    .with_message_key(message_keys::INVALID_FORMAT_ENUM)
                     .with_meta("allowed", self.allowed.clone())
                     .into()
             })
@@ -72,18 +75,19 @@ impl Decoder<Value> for Literal {
         if found == self.0 {
             Ok(found)
         } else {
-            Err(Issue::at_path(path, codes::INVALID_FORMAT, "invalid value")
+            Err(Issue::at_path(path, codes::INVALID_FORMAT)
+                .with_message_key(message_keys::INVALID_FORMAT_LITERAL)
                 .with_meta("expected", self.0.clone())
                 .into())
         }
     }
 }
 
-/// A decoder that reads the string member `tag_field` and decodes the whole input with the
-/// variant it names.
+/// A decoder of an object whose string member `tag_field` names the variant that decodes it.
 ///
-/// `variants` is a tuple of [`variant`]s with the same output. A tag naming none of them is
-/// `not_allowed` at the tag's path, with the sorted tags as `allowed`.
+/// `variants` is a tuple of [`variant`]s with the same output. The input must be an object, as
+/// [`object`] requires. A missing tag is `required` at the tag's path, and a tag naming none of
+/// the variants is `not_allowed` there, with the tags sorted as Java sorts strings as `allowed`.
 ///
 /// ```
 /// use raoh::json::prelude::*;
@@ -110,13 +114,16 @@ pub fn discriminate<V: Variants>(
     variants: V,
 ) -> Discriminate<V> {
     let tag_field = tag_field.into();
-    let mut allowed: Vec<String> = variants.tags().into_iter().map(str::to_owned).collect();
-    allowed.sort();
-    if let Some(pair) = allowed.windows(2).find(|pair| pair[0] == pair[1]) {
-        panic!("duplicate variant tag '{}'", pair[0]);
+    let tags = variants.tags();
+    for (i, tag) in tags.iter().enumerate() {
+        if tags[..i].contains(tag) {
+            panic!("duplicate variant tag '{tag}'");
+        }
     }
+    let mut allowed: Vec<String> = tags.into_iter().map(str::to_owned).collect();
+    java::sort_strings(&mut allowed);
     Discriminate {
-        tag: field(tag_field.clone(), string()),
+        tag: object((field(tag_field.clone(), string()),)),
         tag_field,
         variants,
         allowed,
@@ -126,7 +133,7 @@ pub fn discriminate<V: Variants>(
 /// The decoder [`discriminate`] returns.
 #[derive(Clone, Debug)]
 pub struct Discriminate<V> {
-    tag: Field<StringDecoder>,
+    tag: Object<(Field<StringDecoder>,)>,
     tag_field: Cow<'static, str>,
     variants: V,
     allowed: Vec<String>,
@@ -136,18 +143,15 @@ impl<V: Variants> Decoder<Value> for Discriminate<V> {
     type Output = V::Output;
 
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<V::Output, Issues> {
-        let tag = self.tag.decode_at(input, path)?;
+        let (tag,) = self.tag.decode_at(input, path)?;
         self.variants
             .decode_variant(&tag, input, path)
             .unwrap_or_else(|| {
-                let listed = self.allowed.join(", ");
-                Err(Issue::at_path(
-                    &path.key(&self.tag_field),
-                    codes::NOT_ALLOWED,
-                    format!("must be one of [{listed}]"),
+                Err(
+                    Issue::at_path(&path.key(&self.tag_field), codes::NOT_ALLOWED)
+                        .with_meta("allowed", self.allowed.clone())
+                        .into(),
                 )
-                .with_meta("allowed", self.allowed.clone())
-                .into())
             })
     }
 }
@@ -167,15 +171,21 @@ pub struct Variant<D> {
     decoder: D,
 }
 
-/// A tuple of [`Variant`]s with the same output.
-pub trait Variants {
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// A tuple of [`Variant`]s with the same output. It cannot be implemented outside this crate.
+pub trait Variants: sealed::Sealed {
     /// What each variant gives.
     type Output;
 
     /// The tag of every variant.
+    #[doc(hidden)]
     fn tags(&self) -> Vec<&str>;
 
     /// The result of the variant named `tag`, or `None` when no variant has that tag.
+    #[doc(hidden)]
     fn decode_variant(
         &self,
         tag: &str,
@@ -186,6 +196,8 @@ pub trait Variants {
 
 macro_rules! variants {
     ($First:ident $first:tt $(, $T:ident $idx:tt)*) => {
+        impl<$First, $($T),*> sealed::Sealed for (Variant<$First>, $(Variant<$T>,)*) {}
+
         impl<$First: Decoder<Value>, $($T: Decoder<Value, Output = $First::Output>),*> Variants
             for (Variant<$First>, $(Variant<$T>,)*)
         {
@@ -235,7 +247,7 @@ variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::json::{i64, object};
+    use crate::json::i64;
     use serde_json::json;
 
     fn shape() -> impl Decoder<Value, Output = i64> {
@@ -251,6 +263,10 @@ mod tests {
         )
     }
 
+    fn first(result: Result<i64, Issues>) -> Issue {
+        result.unwrap_err().into_iter().next().unwrap()
+    }
+
     #[test]
     fn the_tag_picks_the_variant() {
         assert_eq!(
@@ -263,17 +279,19 @@ mod tests {
 
     #[test]
     fn an_unknown_tag_is_not_allowed_at_the_tag_path() {
-        let issues = shape().decode(&json!({"kind": "circle"})).unwrap_err();
-        let issue = issues.iter().next().unwrap();
+        let issue = first(shape().decode(&json!({"kind": "circle"})));
         assert_eq!(issue.code(), "not_allowed");
         assert_eq!(issue.path().to_string(), "/kind");
         assert_eq!(issue.meta()["allowed"], json!(["rect", "square"]));
+        assert_eq!(issue.message(), "must be one of [rect, square]");
     }
 
     #[test]
-    fn a_missing_tag_is_required() {
-        let issues = shape().decode(&json!({})).unwrap_err();
-        assert_eq!(issues.iter().next().unwrap().code(), "required");
+    fn a_missing_tag_is_required_and_a_non_object_is_rejected_once() {
+        assert_eq!(first(shape().decode(&json!({}))).code(), "required");
+        let issue = first(shape().decode(&json!("rect")));
+        assert_eq!(issue.code(), "type_mismatch");
+        assert!(issue.path().is_root());
     }
 
     #[test]
@@ -285,6 +303,8 @@ mod tests {
     #[test]
     fn literal_requires_the_exact_string() {
         let issues = literal("v1").decode(&json!("v2")).unwrap_err();
-        assert_eq!(issues.iter().next().unwrap().meta()["expected"], "v1");
+        let issue = issues.iter().next().unwrap();
+        assert_eq!(issue.meta()["expected"], "v1");
+        assert_eq!(issue.message(), "invalid value");
     }
 }

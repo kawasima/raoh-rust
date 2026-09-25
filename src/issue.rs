@@ -1,18 +1,30 @@
 //! What a failed decode reports.
 
-use crate::message::MessageResolver;
+use crate::message::{MessageResolver, Messages};
 use crate::path::{Path, Pointer};
 use indexmap::IndexMap;
-use serde::ser::{Serialize, SerializeMap, SerializeSeq, Serializer};
+use serde::ser::{Serialize, SerializeSeq, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Cow;
 use std::fmt;
 
 /// One problem found in the input: where it is, what kind it is, and what else its code says.
 ///
-/// The `code` and `meta` are what a program reads; `message` is what a person reads. An issue is
-/// created with an English message. A [`MessageResolver`] rewrites it in another language unless
-/// the message was given by the caller as a custom one, which stays as written.
+/// An issue carries no sentence of its own. Its `code`, `message_key` and `meta` are what a
+/// program reads; the sentence a person reads is written from them by a [`MessageResolver`], by
+/// default the English catalogue [`Messages::english`]. A message given with
+/// [`with_message`](Self::with_message) replaces that sentence in every language.
+///
+/// ```
+/// use raoh::{Issue, Messages};
+///
+/// let issue = Issue::new("too_short").with_meta("min", 3);
+/// assert_eq!(issue.message(), "must be at least 3 characters");
+/// assert_eq!(issue.message_with(Messages::japanese()), "3文字以上で入力してください");
+///
+/// let mine = Issue::new("checksum").with_message("the check digit does not match");
+/// assert_eq!(mine.message_with(Messages::japanese()), "the check digit does not match");
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Issue {
     inner: Box<Inner>,
@@ -24,37 +36,31 @@ struct Inner {
     path: Pointer,
     code: Cow<'static, str>,
     message_key: Cow<'static, str>,
-    message: String,
     meta: Map<String, Value>,
-    custom_message: bool,
+    message: Option<String>,
 }
 
 impl Issue {
-    /// An issue at the root, with `message` as its English message.
+    /// An issue with `code` at the root, with the code as its message key.
     ///
     /// Returned from a function given to [`Decoder::and_then`](crate::Decoder::and_then), it is
     /// moved to the path the decoder is at.
-    pub fn new(code: impl Into<Cow<'static, str>>, message: impl Into<String>) -> Self {
+    pub fn new(code: impl Into<Cow<'static, str>>) -> Self {
         let code = code.into();
         Self {
             inner: Box::new(Inner {
                 path: Pointer::root(),
                 message_key: code.clone(),
                 code,
-                message: message.into(),
                 meta: Map::new(),
-                custom_message: false,
+                message: None,
             }),
         }
     }
 
     /// An issue at `path`.
-    pub(crate) fn at_path(
-        path: &Path<'_>,
-        code: impl Into<Cow<'static, str>>,
-        message: impl Into<String>,
-    ) -> Self {
-        Self::new(code, message).at(path.to_pointer())
+    pub(crate) fn at_path(path: &Path<'_>, code: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(code).at(path.to_pointer())
     }
 
     /// This issue at `path` instead.
@@ -63,7 +69,7 @@ impl Issue {
         self
     }
 
-    /// This issue with `key` naming the constraint that produced it.
+    /// This issue with `key` naming the check that produced it.
     pub fn with_message_key(mut self, key: impl Into<Cow<'static, str>>) -> Self {
         self.inner.message_key = key.into();
         self
@@ -75,10 +81,9 @@ impl Issue {
         self
     }
 
-    /// This issue with `message` as a custom message, which no resolver rewrites.
-    pub fn with_custom_message(mut self, message: impl Into<String>) -> Self {
-        self.inner.message = message.into();
-        self.inner.custom_message = true;
+    /// This issue with `message` as its sentence in every language, in place of the catalogue's.
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.inner.message = Some(message.into());
         self
     }
 
@@ -92,15 +97,10 @@ impl Issue {
         &self.inner.code
     }
 
-    /// The key a message catalogue looks up first: the code, or a refinement of it from
+    /// The key a catalogue looks up first: the code, or a refinement of it from
     /// [`message_keys`](crate::message_keys).
     pub fn message_key(&self) -> &str {
         &self.inner.message_key
-    }
-
-    /// The message a person reads.
-    pub fn message(&self) -> &str {
-        &self.inner.message
     }
 
     /// What else the code says about the problem, such as the bound a value fell outside of.
@@ -108,9 +108,22 @@ impl Issue {
         &self.inner.meta
     }
 
-    /// Whether the message was given by the caller and is kept by every resolver.
-    pub fn is_custom_message(&self) -> bool {
-        self.inner.custom_message
+    /// The message given with [`with_message`](Self::with_message), if there is one.
+    pub fn custom_message(&self) -> Option<&str> {
+        self.inner.message.as_deref()
+    }
+
+    /// The sentence a person reads, in English.
+    pub fn message(&self) -> String {
+        self.message_with(Messages::english())
+    }
+
+    /// The sentence a person reads: the custom message if there is one, or what `resolver` writes.
+    pub fn message_with(&self, resolver: &(impl MessageResolver + ?Sized)) -> String {
+        match &self.inner.message {
+            Some(message) => message.clone(),
+            None => resolver.resolve(self),
+        }
     }
 
     /// This issue read as relative to `prefix`.
@@ -121,25 +134,11 @@ impl Issue {
         self
     }
 
-    /// This issue with its message written by `resolver`, unless the message is a custom one.
-    pub fn resolve(&self, resolver: &(impl MessageResolver + ?Sized)) -> Self {
-        let mut issue = self.clone();
-        if !issue.inner.custom_message {
-            issue.inner.message = resolver.resolve(self);
-        }
-        issue
-    }
-
     fn to_json_with(&self, resolver: &(impl MessageResolver + ?Sized)) -> Value {
-        let message = if self.inner.custom_message {
-            self.inner.message.clone()
-        } else {
-            resolver.resolve(self)
-        };
         let mut object = Map::new();
         object.insert("path".into(), self.inner.path.to_string().into());
-        object.insert("code".into(), self.inner.code.as_ref().into());
-        object.insert("message".into(), message.into());
+        object.insert("code".into(), self.code().into());
+        object.insert("message".into(), self.message_with(resolver).into());
         object.insert("meta".into(), Value::Object(self.inner.meta.clone()));
         Value::Object(object)
     }
@@ -148,23 +147,20 @@ impl Issue {
 impl fmt::Display for Issue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.inner.path.is_root() {
-            write!(f, "(root): {}", self.inner.message)
+            write!(f, "(root): {}", self.message())
         } else {
-            write!(f, "{}: {}", self.inner.path, self.inner.message)
+            write!(f, "{}: {}", self.inner.path, self.message())
         }
     }
 }
 
 impl std::error::Error for Issue {}
 
+/// Written as `{"path", "code", "message", "meta"}` with the English message, as
+/// [`Issues::to_json`] writes each issue.
 impl Serialize for Issue {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(Some(4))?;
-        map.serialize_entry("path", &self.inner.path.to_string())?;
-        map.serialize_entry("code", self.inner.code.as_ref())?;
-        map.serialize_entry("message", &self.inner.message)?;
-        map.serialize_entry("meta", &self.inner.meta)?;
-        map.end()
+        self.to_json_with(Messages::english()).serialize(serializer)
     }
 }
 
@@ -218,22 +214,10 @@ impl Issues {
         Self(self.0.into_iter().map(|i| i.rebase(prefix)).collect())
     }
 
-    /// These issues with their messages written by `resolver`, custom messages kept.
-    pub fn resolve(&self, resolver: &(impl MessageResolver + ?Sized)) -> Self {
-        Self(self.0.iter().map(|i| i.resolve(resolver)).collect())
-    }
-
-    /// The messages grouped by the JSON Pointer of their path, in the order each path was first
-    /// seen. Messages are the ones the issues were created with, which are English.
+    /// The English messages grouped by the JSON Pointer of their path, in the order each path
+    /// was first seen.
     pub fn flatten(&self) -> IndexMap<String, Vec<String>> {
-        let mut grouped: IndexMap<String, Vec<String>> = IndexMap::new();
-        for issue in &self.0 {
-            grouped
-                .entry(issue.inner.path.to_string())
-                .or_default()
-                .push(issue.inner.message.clone());
-        }
-        grouped
+        self.flatten_with(Messages::english())
     }
 
     /// As [`flatten`](Self::flatten), with the messages written by `resolver`.
@@ -241,18 +225,21 @@ impl Issues {
         &self,
         resolver: &(impl MessageResolver + ?Sized),
     ) -> IndexMap<String, Vec<String>> {
-        self.resolve(resolver).flatten()
+        let mut grouped: IndexMap<String, Vec<String>> = IndexMap::new();
+        for issue in &self.0 {
+            grouped
+                .entry(issue.path().to_string())
+                .or_default()
+                .push(issue.message_with(resolver));
+        }
+        grouped
     }
 
-    /// The issues as a JSON array of `{"path", "code", "message", "meta"}` objects, the form Raoh
-    /// for Java and PHP give them in. Messages are the ones the issues were created with.
+    /// The issues as a JSON array of `{"path", "code", "message", "meta"}` objects with English
+    /// messages, the form Raoh for Java and PHP give them in. `serde_json::to_value(&issues)`
+    /// gives the same.
     pub fn to_json(&self) -> Value {
-        Value::Array(
-            self.0
-                .iter()
-                .map(|i| serde_json::to_value(i).unwrap_or(Value::Null))
-                .collect(),
-        )
+        self.to_json_with(Messages::english())
     }
 
     /// As [`to_json`](Self::to_json), with the messages written by `resolver`.
@@ -317,6 +304,7 @@ impl fmt::Display for Issues {
 
 impl std::error::Error for Issues {}
 
+/// Written as [`Issues::to_json`] writes them.
 impl Serialize for Issues {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
@@ -333,9 +321,13 @@ mod tests {
     use crate::codes;
     use serde_json::json;
 
+    fn at(segment: &str) -> Pointer {
+        [segment].into_iter().collect()
+    }
+
     #[test]
     fn rebase_puts_the_prefix_before_the_issue_path() {
-        let issue = Issue::new(codes::REQUIRED, "is required").at(["id"].into_iter().collect());
+        let issue = Issue::new(codes::REQUIRED).at(at("id"));
         let user = Path::ROOT.key("user");
         assert_eq!(issue.rebase(&user).path().to_string(), "/user/id");
     }
@@ -343,21 +335,21 @@ mod tests {
     #[test]
     fn flatten_keeps_the_order_paths_were_first_seen() {
         let issues: Issues = vec![
-            Issue::new(codes::REQUIRED, "a1").at(["b"].into_iter().collect()),
-            Issue::new(codes::REQUIRED, "b1").at(["a"].into_iter().collect()),
-            Issue::new(codes::REQUIRED, "a2").at(["b"].into_iter().collect()),
+            Issue::new(codes::REQUIRED).at(at("b")),
+            Issue::new(codes::BLANK).at(at("a")),
+            Issue::new(codes::BLANK).at(at("b")),
         ]
         .into();
         let flat = issues.flatten();
         assert_eq!(flat.keys().collect::<Vec<_>>(), ["/b", "/a"]);
-        assert_eq!(flat["/b"], ["a1", "a2"]);
+        assert_eq!(flat["/b"], ["is required", "must not be blank"]);
     }
 
     #[test]
     fn serialize_is_the_same_as_to_json() {
-        let issues: Issues = Issue::new(codes::TOO_SHORT, "must be at least 3 characters")
+        let issues: Issues = Issue::new(codes::TOO_SHORT)
             .with_meta("min", 3)
-            .at(["name"].into_iter().collect())
+            .at(at("name"))
             .into();
         let expected = json!([{
             "path": "/name",
@@ -367,5 +359,25 @@ mod tests {
         }]);
         assert_eq!(issues.to_json(), expected);
         assert_eq!(serde_json::to_value(&issues).unwrap(), expected);
+    }
+
+    #[test]
+    fn a_custom_message_is_kept_in_every_language() {
+        let issue = Issue::new(codes::REQUIRED).with_message("give a name");
+        assert_eq!(issue.message(), "give a name");
+        assert_eq!(issue.message_with(Messages::japanese()), "give a name");
+        let issues: Issues = issue.into();
+        assert_eq!(
+            issues.to_json_with(Messages::japanese())[0]["message"],
+            "give a name"
+        );
+    }
+
+    #[test]
+    fn a_code_no_catalogue_knows_says_which_code_it_is() {
+        assert_eq!(
+            Issue::new("checksum").message(),
+            "validation failed: checksum"
+        );
     }
 }

@@ -35,7 +35,7 @@ impl BoolDecoder {
         self.steps.require(
             move |b| *b == expected,
             move |b| {
-                Issue::new(codes::INVALID_VALUE, format!("must be {expected}"))
+                Issue::new(codes::INVALID_VALUE)
                     .with_meta("expected", expected)
                     .with_meta("actual", *b)
             },
@@ -43,8 +43,8 @@ impl BoolDecoder {
         self
     }
 
-    /// Gives the constraint written just before this, or the type check when there is none, a
-    /// custom message that no resolver rewrites.
+    /// Gives the most recent constraint written before this, or the type check when there is
+    /// none, a custom message that every language shows as written.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.steps.set_message(message.into());
         self

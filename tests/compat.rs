@@ -43,6 +43,11 @@ fn decoder(name: &str) -> Option<BoxDecoder<Value, Value>> {
         "string_ip" => out(string().ip()),
         "string_ulid" => out(string().ulid()),
         "string_cuid" => out(string().cuid()),
+        "string_trim" => out(string().trim()),
+        "string_lower" => out(string().lowercase()),
+        "string_upper" => out(string().uppercase()),
+        "string_email" => out(string().email()),
+        "string_one_of_astral" => out(string().one_of(["\u{ff21}", "\u{1f600}"])),
         #[cfg(feature = "regex")]
         "string_pattern" => out(string().pattern(r"[a-z]+\d")),
         #[cfg(feature = "uuid")]
@@ -68,6 +73,9 @@ fn decoder(name: &str) -> Option<BoxDecoder<Value, Value>> {
         "double_range" => out(f64().range(0.5..=1.5)),
         "double_min" => out(f64().min(0.5)),
         "double_one_of" => out(f64().one_of([2.0, 1.0])),
+        "double_min_1e7" => out(f64().min(1e7)),
+        "double_max_small" => out(f64().max(1e-4)),
+        "double_one_of_big" => out(f64().one_of([1e7, 0.5])),
 
         #[cfg(feature = "decimal")]
         "decimal" => out(decimal().map(decimal_json)),
@@ -75,6 +83,10 @@ fn decoder(name: &str) -> Option<BoxDecoder<Value, Value>> {
         "decimal_scale_2" => out(decimal().scale(2).map(decimal_json)),
         #[cfg(feature = "decimal")]
         "decimal_positive" => out(decimal().positive().map(decimal_json)),
+        #[cfg(feature = "decimal")]
+        "decimal_min_small" => out(decimal()
+            .min(rust_decimal::Decimal::new(5, 4))
+            .map(decimal_json)),
         #[cfg(feature = "decimal")]
         "decimal_range" => out(decimal()
             .range(rust_decimal::Decimal::ZERO..=rust_decimal::Decimal::TEN)
@@ -115,6 +127,10 @@ fn decoder(name: &str) -> Option<BoxDecoder<Value, Value>> {
             field("count", i32().with_default(0)),
         ))),
         "dict" => out(dict(i32())),
+        "optional_only" => out(object((
+            optional_field("a", string()),
+            optional_field("b", string()),
+        ))),
 
         "enum" => out(enum_of([("red", "red"), ("green", "green")])),
         "literal" => out(literal("v1")),
@@ -148,7 +164,8 @@ fn decoder(name: &str) -> Option<BoxDecoder<Value, Value>> {
                 if start <= end {
                     Ok((start, end))
                 } else {
-                    Err(Issue::new("invalid_value", "end is before start")
+                    Err(Issue::new("invalid_value")
+                        .with_message("end is before start")
                         .at(["end"].into_iter().collect()))
                 }
             }),
@@ -162,19 +179,11 @@ fn decimal_json(d: rust_decimal::Decimal) -> Value {
     serde_json::from_str(&d.to_string()).unwrap()
 }
 
-/// Cases where this crate gives something else than Raoh for Java on purpose, with what it gives.
-///
-/// Raoh for Java 0.7.2 writes a path without escaping `/` and `~` in a key. This crate writes
-/// RFC 6901 pointers, as the Souther runtime does, so a key holding either stays one segment.
-fn divergence(name: &str) -> Option<Value> {
-    match name {
-        "escaped_keys" => Some(json!({ "issues": [
-            {"path": "/a~1b", "code": "required", "message_key": "required",
-             "message": "is required", "meta": {}},
-            {"path": "/~0c", "code": "required", "message_key": "required",
-             "message": "is required", "meta": {}},
-        ]})),
-        _ => None,
+/// What each case gives, as JSON: `{"ok": output}` or `{"issues": [...]}`.
+fn outcome(result: Result<Value, raoh::Issues>) -> Value {
+    match result {
+        Ok(value) => json!({ "ok": value }),
+        Err(issues) => json!({ "issues": issues.iter().map(issue_json).collect::<Vec<_>>() }),
     }
 }
 
@@ -188,31 +197,218 @@ fn issue_json(issue: &Issue) -> Value {
     })
 }
 
+fn failure(path: &str, code: &str, message_key: &str, message: &str, meta: Value) -> Value {
+    json!({ "issues": [
+        {"path": path, "code": code, "message_key": message_key, "message": message, "meta": meta}
+    ]})
+}
+
+/// The cases where this crate gives something else than Raoh for Java on purpose, keyed by
+/// decoder and input, with what this crate gives and why.
+fn divergences() -> Vec<(&'static str, Value, Value, &'static str)> {
+    let not_an_object = |actual: &str| {
+        failure(
+            "",
+            "type_mismatch",
+            "type_mismatch",
+            "expected object",
+            json!({"expected": "object", "actual": actual}),
+        )
+    };
+    let required = failure("", "required", "required", "is required", json!({}));
+    let object_scope = "object() checks the input is an object once, at its own path; Java checks \
+                        it in each field and reads a non-object as holding no optional field";
+    let mut list = vec![
+        ("person", json!([1]), not_an_object("array"), object_scope),
+        ("person", Value::Null, required.clone(), object_scope),
+        (
+            "person",
+            json!("str"),
+            not_an_object("string"),
+            object_scope,
+        ),
+        (
+            "person_strict",
+            json!([1]),
+            not_an_object("array"),
+            object_scope,
+        ),
+        (
+            "optional_only",
+            json!("x"),
+            not_an_object("string"),
+            object_scope,
+        ),
+        ("optional_only", Value::Null, required, object_scope),
+        (
+            "optional_only",
+            json!([1]),
+            not_an_object("array"),
+            object_scope,
+        ),
+        (
+            "shape",
+            json!("rect"),
+            not_an_object("string"),
+            object_scope,
+        ),
+        (
+            "escaped_keys",
+            json!({}),
+            json!({ "issues": [
+                {"path": "/a~1b", "code": "required", "message_key": "required",
+                 "message": "is required", "meta": {}},
+                {"path": "/~0c", "code": "required", "message_key": "required",
+                 "message": "is required", "meta": {}},
+            ]}),
+            "paths are RFC 6901 JSON Pointers, as in the Souther runtime; Java does not escape / \
+             and ~ in a key",
+        ),
+        (
+            "long",
+            json!("-0.0"),
+            json!({"ok": 0}),
+            "serde_json reads -0 and -0.0 as the same float, so both are read as the integer 0; \
+             Jackson reads -0.0 as a double",
+        ),
+    ];
+    if cfg!(feature = "decimal") {
+        list.push((
+            "decimal_min_small",
+            json!(0.0001),
+            failure(
+                "",
+                "out_of_range",
+                "out_of_range.minimum",
+                "must be at least 5.0E-4",
+                json!({"min": 0.0005, "actual": 0.0001}),
+            ),
+            "meta holds a decimal as a JSON number, which a message writes as a Java double",
+        ));
+    }
+    if cfg!(feature = "uuid") {
+        let uuid_crate = "uuid() parses with the uuid crate, which accepts the forms without \
+                          hyphens and in braces and not Java's short groups";
+        let uuid = json!({"ok": "123e4567-e89b-12d3-a456-426614174000"});
+        list.push((
+            "string_uuid",
+            json!("123e4567e89b12d3a456426614174000"),
+            uuid.clone(),
+            uuid_crate,
+        ));
+        list.push((
+            "string_uuid",
+            json!("{123e4567-e89b-12d3-a456-426614174000}"),
+            uuid,
+            uuid_crate,
+        ));
+        list.push((
+            "string_uuid",
+            json!("1-1-1-1-1"),
+            failure(
+                "",
+                "invalid_format",
+                "invalid_format.uuid",
+                "not a valid UUID",
+                json!({}),
+            ),
+            uuid_crate,
+        ));
+    }
+    if cfg!(feature = "url") {
+        let url_crate = "url() parses with the url crate, which follows the WHATWG URL Standard \
+                         and gives the URL normalised";
+        list.push((
+            "string_url",
+            json!("http://my_host.com"),
+            json!({"ok": "http://my_host.com/"}),
+            url_crate,
+        ));
+        list.push((
+            "string_url",
+            json!("https://example.com"),
+            json!({"ok": "https://example.com/"}),
+            url_crate,
+        ));
+        list.push((
+            "string_url",
+            json!("https://日本.jp/"),
+            json!({"ok": "https://xn--wgv71a.jp/"}),
+            url_crate,
+        ));
+        list.push((
+            "string_url",
+            json!("http://example.com:99999/"),
+            failure(
+                "",
+                "invalid_format",
+                "invalid_format.url",
+                "not a valid URL",
+                json!({}),
+            ),
+            url_crate,
+        ));
+    }
+    list
+}
+
+/// Java gives `invalid_format` issues the key `invalid_format`; this crate refines it, as
+/// `invalid_format.email`, so a catalogue can tell them apart. A refined key stands for its
+/// parent here.
+fn with_parent_keys(mut actual: Value, wanted: &Value) -> Value {
+    if let (Some(ours), Some(theirs)) = (
+        actual.get_mut("issues").and_then(Value::as_array_mut),
+        wanted.get("issues").and_then(Value::as_array),
+    ) {
+        for (ours, theirs) in ours.iter_mut().zip(theirs) {
+            let (Some(our_key), Some(their_key)) =
+                (ours["message_key"].as_str(), theirs["message_key"].as_str())
+            else {
+                continue;
+            };
+            if our_key.starts_with(&format!("{their_key}.")) {
+                ours["message_key"] = json!(their_key);
+            }
+        }
+    }
+    actual
+}
+
 #[test]
 fn every_case_gives_what_raoh_for_java_gives() {
     let expected: Vec<Value> = serde_json::from_str(include_str!("compat/expected.json")).unwrap();
+    let divergences = divergences();
     let mut mismatches = Vec::new();
     let mut skipped = Vec::new();
+    let mut diverged = 0;
     for case in &expected {
         let name = case["decoder"].as_str().unwrap();
-        let input = &case["input"];
+        // A number whose text matters, such as -0, is given as the JSON text to read.
+        let (input, key) = match case.get("input_json").and_then(Value::as_str) {
+            Some(text) => (serde_json::from_str(text).unwrap(), json!(text)),
+            None => (case["input"].clone(), case["input"].clone()),
+        };
         let Some(decoder) = decoder(name) else {
             skipped.push(name);
             continue;
         };
-        let actual = match decoder.decode(input) {
-            Ok(value) => json!({ "ok": value }),
-            Err(issues) => json!({ "issues": issues.iter().map(issue_json).collect::<Vec<_>>() }),
+        let java = match case.get("ok") {
+            Some(value) => json!({ "ok": value }),
+            None => json!({ "issues": case["issues"] }),
         };
-        let wanted = match (divergence(name), case.get("ok")) {
-            (Some(ours), _) => ours,
-            (None, Some(value)) => json!({ "ok": value }),
-            (None, None) => json!({ "issues": case["issues"] }),
+        let wanted = match divergences
+            .iter()
+            .find(|(d, i, _, _)| *d == name && *i == key)
+        {
+            Some((_, _, ours, _)) => {
+                diverged += 1;
+                ours.clone()
+            }
+            None => java,
         };
+        let actual = with_parent_keys(outcome(decoder.decode(&input)), &wanted);
         if actual != wanted {
-            mismatches.push(format!(
-                "{name} {input}\n  java: {wanted}\n  rust: {actual}"
-            ));
+            mismatches.push(format!("{name} {key}\n  want: {wanted}\n  rust: {actual}"));
         }
     }
     if cfg!(all(
@@ -222,6 +418,7 @@ fn every_case_gives_what_raoh_for_java_gives() {
         feature = "decimal"
     )) {
         assert!(skipped.is_empty(), "no Rust decoder for {skipped:?}");
+        assert_eq!(diverged, divergences.len(), "a divergence names no case");
     }
     assert!(
         mismatches.is_empty(),

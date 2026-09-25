@@ -1,7 +1,7 @@
 //! The codes an [`Issue`](crate::Issue) carries and the message keys that refine them.
 //!
-//! Both are shared with Raoh for Java and PHP, so a message catalogue written for one resolves the
-//! issues of the others.
+//! The codes are shared with Raoh for Java and PHP, so a program that reads them reads the issues
+//! of any of them the same way.
 
 /// What kind of problem an issue reports.
 pub mod codes {
@@ -47,11 +47,42 @@ pub mod codes {
     pub const ONE_OF_FAILED: &str = "one_of_failed";
     /// A member is missing.
     pub const MISSING_FIELD: &str = "missing_field";
+
+    /// Every code above.
+    pub const ALL: &[&str] = &[
+        REQUIRED,
+        BLANK,
+        TOO_SHORT,
+        TOO_LONG,
+        INVALID_LENGTH,
+        OUT_OF_RANGE,
+        NOT_MULTIPLE_OF,
+        INVALID_SCALE,
+        TOO_SMALL,
+        TOO_BIG,
+        INVALID_SIZE,
+        INVALID_VALUE,
+        INVALID_FORMAT,
+        TYPE_MISMATCH,
+        UNKNOWN_FIELD,
+        MISSING_ELEMENT,
+        MISSING_ELEMENTS,
+        DUPLICATE_ELEMENT,
+        NOT_ALLOWED,
+        ONE_OF_FAILED,
+        MISSING_FIELD,
+    ];
 }
 
-/// Keys that name which constraint produced an issue, where one code covers several.
+/// Keys that name which check produced an issue, where one code covers several.
 ///
-/// An issue whose message key is not one of these uses its code as its key.
+/// A message key is its code followed by `.` and a refinement, so a catalogue that has a
+/// template only for the code still resolves it. An issue whose message key is not one of these
+/// uses its code as its key.
+///
+/// The `out_of_range` and `too_small` keys are Raoh for Java's. The `invalid_format` ones are this
+/// crate's: Raoh for Java gives those issues the key `invalid_format` and tells them apart only
+/// by the English sentence it writes into them, which a catalogue cannot look up.
 pub mod message_keys {
     /// `out_of_range` from a lower bound.
     pub const OUT_OF_RANGE_MINIMUM: &str = "out_of_range.minimum";
@@ -69,4 +100,58 @@ pub mod message_keys {
     pub const OUT_OF_RANGE_NON_POSITIVE: &str = "out_of_range.non_positive";
     /// `too_small` from `non_empty()`.
     pub const TOO_SMALL_NONEMPTY: &str = "too_small.nonempty";
+    /// `invalid_format` from `email()`.
+    pub const INVALID_FORMAT_EMAIL: &str = "invalid_format.email";
+    /// `invalid_format` from `url()`.
+    pub const INVALID_FORMAT_URL: &str = "invalid_format.url";
+    /// `invalid_format` from `uuid()`.
+    pub const INVALID_FORMAT_UUID: &str = "invalid_format.uuid";
+    /// `invalid_format` from `ip()`.
+    pub const INVALID_FORMAT_IP: &str = "invalid_format.ip";
+    /// `invalid_format` from `ipv4()`.
+    pub const INVALID_FORMAT_IPV4: &str = "invalid_format.ipv4";
+    /// `invalid_format` from `ipv6()`.
+    pub const INVALID_FORMAT_IPV6: &str = "invalid_format.ipv6";
+    /// `invalid_format` from `ulid()`.
+    pub const INVALID_FORMAT_ULID: &str = "invalid_format.ulid";
+    /// `invalid_format` from `cuid()`.
+    pub const INVALID_FORMAT_CUID: &str = "invalid_format.cuid";
+    /// `invalid_format` from `starts_with()`.
+    pub const INVALID_FORMAT_STARTS_WITH: &str = "invalid_format.starts_with";
+    /// `invalid_format` from `ends_with()`.
+    pub const INVALID_FORMAT_ENDS_WITH: &str = "invalid_format.ends_with";
+    /// `invalid_format` from `contains()`.
+    pub const INVALID_FORMAT_INCLUDES: &str = "invalid_format.includes";
+    /// `invalid_format` from `enum_of()`.
+    pub const INVALID_FORMAT_ENUM: &str = "invalid_format.enum";
+    /// `invalid_format` from `literal()`.
+    pub const INVALID_FORMAT_LITERAL: &str = "invalid_format.literal";
+    /// `invalid_format` from text that is not JSON.
+    pub const INVALID_FORMAT_JSON: &str = "invalid_format.json";
+
+    /// Every message key above.
+    pub const ALL: &[&str] = &[
+        OUT_OF_RANGE_MINIMUM,
+        OUT_OF_RANGE_MAXIMUM,
+        OUT_OF_RANGE_RANGE,
+        OUT_OF_RANGE_POSITIVE,
+        OUT_OF_RANGE_NEGATIVE,
+        OUT_OF_RANGE_NON_NEGATIVE,
+        OUT_OF_RANGE_NON_POSITIVE,
+        TOO_SMALL_NONEMPTY,
+        INVALID_FORMAT_EMAIL,
+        INVALID_FORMAT_URL,
+        INVALID_FORMAT_UUID,
+        INVALID_FORMAT_IP,
+        INVALID_FORMAT_IPV4,
+        INVALID_FORMAT_IPV6,
+        INVALID_FORMAT_ULID,
+        INVALID_FORMAT_CUID,
+        INVALID_FORMAT_STARTS_WITH,
+        INVALID_FORMAT_ENDS_WITH,
+        INVALID_FORMAT_INCLUDES,
+        INVALID_FORMAT_ENUM,
+        INVALID_FORMAT_LITERAL,
+        INVALID_FORMAT_JSON,
+    ];
 }

@@ -2,7 +2,6 @@ use super::steps::Steps;
 use super::{is_missing, unexpected};
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
-use crate::message::display;
 use crate::path::Path;
 use crate::{codes, message_keys};
 use serde::Serialize;
@@ -104,8 +103,8 @@ impl<D: Decoder<Value>> ListDecoder<D>
 where
     D::Output: 'static,
 {
-    /// Gives the constraint written just before this, or the type check when there is none, a
-    /// custom message that no resolver rewrites.
+    /// Gives the most recent constraint written before this, or the type check when there is
+    /// none, a custom message that every language shows as written.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.steps.set_message(message.into());
         self
@@ -116,7 +115,7 @@ where
         self.steps.require(
             |items| !items.is_empty(),
             |_| {
-                Issue::new(codes::TOO_SMALL, "must not be empty")
+                Issue::new(codes::TOO_SMALL)
                     .with_message_key(message_keys::TOO_SMALL_NONEMPTY)
                     .with_meta("min", 1)
                     .with_meta("actual", 0)
@@ -130,7 +129,7 @@ where
         self.steps.require(
             move |items| items.len() >= n,
             move |items| {
-                Issue::new(codes::TOO_SMALL, format!("must have at least {n} elements"))
+                Issue::new(codes::TOO_SMALL)
                     .with_meta("min", n)
                     .with_meta("actual", items.len())
             },
@@ -143,7 +142,7 @@ where
         self.steps.require(
             move |items| items.len() <= n,
             move |items| {
-                Issue::new(codes::TOO_BIG, format!("must have at most {n} elements"))
+                Issue::new(codes::TOO_BIG)
                     .with_meta("max", n)
                     .with_meta("actual", items.len())
             },
@@ -156,12 +155,9 @@ where
         self.steps.require(
             move |items| items.len() == n,
             move |items| {
-                Issue::new(
-                    codes::INVALID_SIZE,
-                    format!("must have exactly {n} elements"),
-                )
-                .with_meta("expected", n)
-                .with_meta("actual", items.len())
+                Issue::new(codes::INVALID_SIZE)
+                    .with_meta("expected", n)
+                    .with_meta("actual", items.len())
             },
         );
         self
@@ -187,12 +183,7 @@ where
                         duplicates.push(serde_json::to_value(item).unwrap_or(Value::Null));
                     }
                 }
-                let listed = display(&Value::Array(duplicates.clone()));
-                Issue::new(
-                    codes::DUPLICATE_ELEMENT,
-                    format!("must not contain duplicates: {listed}"),
-                )
-                .with_meta("duplicates", duplicates)
+                Issue::new(codes::DUPLICATE_ELEMENT).with_meta("duplicates", duplicates)
             },
         );
         self

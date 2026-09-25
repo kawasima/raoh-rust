@@ -40,7 +40,8 @@ fn and_then_moves_its_issues_to_where_the_decoder_is_exactly_once() {
         if start <= end {
             Ok((start, end))
         } else {
-            Err(Issue::new("invalid_value", "end is before start")
+            Err(Issue::new("invalid_value")
+                .with_message("end is before start")
                 .at(["end"].into_iter().collect()))
         }
     });
@@ -57,7 +58,8 @@ fn pipe_hands_the_output_on_at_the_same_path() {
         if n % 2 == 0 {
             Ok(*n)
         } else {
-            Err(Issue::new("odd", "must be even")
+            Err(Issue::new("odd")
+                .with_message("must be even")
                 .at(path.to_pointer())
                 .into())
         }
@@ -89,7 +91,7 @@ fn refine_reports_its_message_as_a_custom_one() {
     let issues = decoder.decode(&json!(3)).unwrap_err();
     let issue = issues.iter().next().unwrap();
     assert_eq!(issue.code(), "odd");
-    assert!(issue.is_custom_message());
+    assert_eq!(issue.custom_message(), Some("must be even"));
 }
 
 #[test]

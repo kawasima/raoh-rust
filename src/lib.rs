@@ -41,6 +41,7 @@
 pub mod combinator;
 mod decoder;
 mod issue;
+mod java;
 pub mod json;
 mod message;
 mod path;
@@ -50,7 +51,7 @@ mod vocabulary;
 pub use combinator::{lazy, one_of};
 pub use decoder::{BoxDecoder, Decoder, FnDecoder, decoder_fn};
 pub use issue::{Issue, Issues};
-pub use message::{MessageResolver, Messages};
+pub use message::{MessageResolver, Messages, PropertiesError};
 pub use path::{Path, Pointer, Segment};
 pub use presence::Presence;
 

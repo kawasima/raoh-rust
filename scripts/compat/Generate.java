@@ -48,6 +48,11 @@ public class Generate {
             case "string_ulid" -> string().ulid();
             case "string_cuid" -> string().cuid();
             case "string_pattern" -> string().pattern(Pattern.compile("[a-z]+\\d"));
+            case "string_trim" -> string().trim();
+            case "string_lower" -> string().toLowerCase();
+            case "string_upper" -> string().toUpperCase();
+            case "string_email" -> string().email();
+            case "string_one_of_astral" -> string().oneOf("\uff21", "\ud83d\ude00");
             case "string_uuid" -> string().uuid().map(Object::toString);
             case "string_url" -> string().url().map(Object::toString);
 
@@ -69,11 +74,15 @@ public class Generate {
             case "double_range" -> double_().range(0.5, 1.5);
             case "double_min" -> double_().min(0.5);
             case "double_one_of" -> double_().oneOf(2.0, 1.0);
+            case "double_min_1e7" -> double_().min(1e7);
+            case "double_max_small" -> double_().max(1e-4);
+            case "double_one_of_big" -> double_().oneOf(1e7, 0.5);
 
             case "decimal" -> decimal();
             case "decimal_scale_2" -> decimal().scale(2);
             case "decimal_positive" -> decimal().positive();
             case "decimal_range" -> decimal().range(new BigDecimal("0"), new BigDecimal("10"));
+            case "decimal_min_small" -> decimal().min(new BigDecimal("0.0005"));
 
             case "bool" -> bool();
             case "bool_is_true" -> bool().isTrue();
@@ -105,6 +114,8 @@ public class Generate {
                     field("count", Decoders.withDefault(int_(), 0)))
                     .map((items, count) -> List.of(items, count));
             case "dict" -> map(int_());
+            case "optional_only" -> combine(optionalField("a", string()), optionalField("b", string()))
+                    .map((a, b) -> listOf(a.orElse(null), b.orElse(null)));
 
             case "enum" -> enumOf(Color.class).map(c -> c.name().toLowerCase());
             case "literal" -> literal("v1");
@@ -145,14 +156,23 @@ public class Generate {
     }
 
     public static void main(String[] args) throws Exception {
+        // toLowerCase and toUpperCase follow the default locale; fix it so the output does not
+        // depend on the machine that runs this.
+        java.util.Locale.setDefault(java.util.Locale.ROOT);
         var cases = MAPPER.readTree(Files.readString(Path.of(args[0])));
         var results = new ArrayList<Map<String, Object>>();
         for (var c : cases) {
             var name = c.get("decoder").asString();
-            var input = c.get("input");
+            // A number whose text matters, such as -0, is given as the JSON text to read.
+            var text = c.get("input_json");
+            var input = text != null ? MAPPER.readTree(text.asString()) : c.get("input");
             var result = new LinkedHashMap<String, Object>();
             result.put("decoder", name);
-            result.put("input", input);
+            if (text != null) {
+                result.put("input_json", text.asString());
+            } else {
+                result.put("input", input);
+            }
             Result<?> r = decoder(name).decode(input);
             switch (r) {
                 case Ok<?> ok -> result.put("ok", ok.value());

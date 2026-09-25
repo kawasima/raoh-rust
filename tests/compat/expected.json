@@ -81,8 +81,8 @@
     "message_key" : "too_short",
     "message" : "must be at least 3 characters",
     "meta" : {
-      "min" : 3,
-      "actual" : 2
+      "actual" : 2,
+      "min" : 3
     }
   } ]
 }, {
@@ -353,8 +353,8 @@
     "message_key" : "out_of_range.minimum",
     "message" : "must be at least 1",
     "meta" : {
-      "min" : 1,
-      "actual" : 0
+      "actual" : 0,
+      "min" : 1
     }
   } ]
 }, {
@@ -379,9 +379,9 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0 and 150",
     "meta" : {
-      "min" : 0,
+      "max" : 150,
       "actual" : 200,
-      "max" : 150
+      "min" : 0
     }
   } ]
 }, {
@@ -393,9 +393,9 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0 and 150",
     "meta" : {
-      "min" : 0,
+      "max" : 150,
       "actual" : -1,
-      "max" : 150
+      "min" : 0
     }
   } ]
 }, {
@@ -411,8 +411,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "min" : 1,
-      "actual" : 0
+      "actual" : 0,
+      "min" : 1
     }
   } ]
 }, {
@@ -437,8 +437,8 @@
     "message_key" : "out_of_range.non_negative",
     "message" : "must be non-negative",
     "meta" : {
-      "min" : 0,
-      "actual" : -1
+      "actual" : -1,
+      "min" : 0
     }
   } ]
 }, {
@@ -463,8 +463,8 @@
     "message_key" : "not_multiple_of",
     "message" : "must be a multiple of 3",
     "meta" : {
-      "divisor" : 3,
-      "actual" : 4
+      "actual" : 4,
+      "divisor" : 3
     }
   } ]
 }, {
@@ -540,8 +540,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "min" : 0.0,
-      "actual" : 0.0
+      "actual" : 0.0,
+      "min" : 0.0
     }
   } ]
 }, {
@@ -566,9 +566,9 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0.5 and 1.5",
     "meta" : {
-      "min" : 0.5,
+      "max" : 1.5,
       "actual" : 2.0,
-      "max" : 1.5
+      "min" : 0.5
     }
   } ]
 }, {
@@ -580,8 +580,8 @@
     "message_key" : "out_of_range.minimum",
     "message" : "must be at least 0.5",
     "meta" : {
-      "min" : 0.5,
-      "actual" : 0.25
+      "actual" : 0.25,
+      "min" : 0.5
     }
   } ]
 }, {
@@ -636,8 +636,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "min" : 0,
-      "actual" : 0
+      "actual" : 0,
+      "min" : 0
     }
   } ]
 }, {
@@ -649,9 +649,9 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0 and 10",
     "meta" : {
-      "min" : 0,
+      "max" : 10,
       "actual" : 10.5,
-      "max" : 10
+      "min" : 0
     }
   } ]
 }, {
@@ -751,8 +751,8 @@
     "message_key" : "too_small.nonempty",
     "message" : "must not be empty",
     "meta" : {
-      "min" : 1,
-      "actual" : 0
+      "actual" : 0,
+      "min" : 1
     }
   } ]
 }, {
@@ -764,8 +764,8 @@
     "message_key" : "too_small",
     "message" : "must have at least 2 elements",
     "meta" : {
-      "min" : 2,
-      "actual" : 1
+      "actual" : 1,
+      "min" : 2
     }
   } ]
 }, {
@@ -1154,8 +1154,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "min" : 1,
-      "actual" : 0
+      "actual" : 0,
+      "min" : 1
     }
   } ]
 }, {
@@ -1320,6 +1320,7 @@
     "message" : "no variant matched",
     "meta" : {
       "candidates" : [ {
+        "candidate" : 0,
         "issues" : [ {
           "path" : "",
           "code" : "type_mismatch",
@@ -1328,19 +1329,18 @@
             "expected" : "integer",
             "actual" : "string"
           }
-        } ],
-        "candidate" : 0
+        } ]
       }, {
+        "candidate" : 1,
         "issues" : [ {
           "path" : "",
           "code" : "too_short",
           "message" : "must be at least 3 characters",
           "meta" : {
-            "min" : 3,
-            "actual" : 2
+            "actual" : 2,
+            "min" : 3
           }
-        } ],
-        "candidate" : 1
+        } ]
       } ]
     }
   } ]
@@ -1417,6 +1417,381 @@
     "message" : "expected integer",
     "meta" : {
       "expected" : "integer",
+      "actual" : "string"
+    }
+  } ]
+}, {
+  "decoder" : "string_trim",
+  "input" : "\u0000abc",
+  "ok" : "abc"
+}, {
+  "decoder" : "string_trim",
+  "input" : "　山田　",
+  "ok" : "　山田　"
+}, {
+  "decoder" : "string_trim",
+  "input" : " x ",
+  "ok" : " x "
+}, {
+  "decoder" : "string_trim",
+  "input" : "\t x \n",
+  "ok" : "x"
+}, {
+  "decoder" : "string_trim",
+  "input" : "x",
+  "ok" : "x"
+}, {
+  "decoder" : "string_trim",
+  "input" : "\u001Fx\u001F",
+  "ok" : "x"
+}, {
+  "decoder" : "string_non_blank",
+  "input" : " ",
+  "ok" : " "
+}, {
+  "decoder" : "string_non_blank",
+  "input" : "　",
+  "issues" : [ {
+    "path" : "",
+    "code" : "blank",
+    "message_key" : "blank",
+    "message" : "must not be blank",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_non_blank",
+  "input" : " ",
+  "ok" : " "
+}, {
+  "decoder" : "string_non_blank",
+  "input" : "\u001C",
+  "issues" : [ {
+    "path" : "",
+    "code" : "blank",
+    "message_key" : "blank",
+    "message" : "must not be blank",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_non_blank",
+  "input" : "",
+  "ok" : ""
+}, {
+  "decoder" : "string_non_blank",
+  "input" : "​",
+  "ok" : "​"
+}, {
+  "decoder" : "string_non_blank",
+  "input" : " ",
+  "issues" : [ {
+    "path" : "",
+    "code" : "blank",
+    "message_key" : "blank",
+    "message" : "must not be blank",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_min_3",
+  "input" : "😀😀",
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_short",
+    "message_key" : "too_short",
+    "message" : "must be at least 3 characters",
+    "meta" : {
+      "actual" : 2,
+      "min" : 3
+    }
+  } ]
+}, {
+  "decoder" : "string_max_3",
+  "input" : "😀😀😀😀",
+  "issues" : [ {
+    "path" : "",
+    "code" : "too_long",
+    "message_key" : "too_long",
+    "message" : "must be at most 3 characters",
+    "meta" : {
+      "max" : 3,
+      "actual" : 4
+    }
+  } ]
+}, {
+  "decoder" : "string_one_of_astral",
+  "input" : "z",
+  "issues" : [ {
+    "path" : "",
+    "code" : "not_allowed",
+    "message_key" : "not_allowed",
+    "message" : "must be one of [😀, Ａ]",
+    "meta" : {
+      "allowed" : [ "😀", "Ａ" ],
+      "actual" : "z"
+    }
+  } ]
+}, {
+  "decoder" : "string_lower",
+  "input" : "ΟΔΟΣ",
+  "ok" : "οδος"
+}, {
+  "decoder" : "string_lower",
+  "input" : "İ",
+  "ok" : "i̇"
+}, {
+  "decoder" : "string_upper",
+  "input" : "ß",
+  "ok" : "SS"
+}, {
+  "decoder" : "string_upper",
+  "input" : "ﬁ",
+  "ok" : "FI"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "::ffff:1.2.3.4",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "fe80::1%1",
+  "ok" : "fe80::1%1"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "::1.2.3.4",
+  "ok" : "::1.2.3.4"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "::",
+  "ok" : "::"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "1::2::3",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_ip",
+  "input" : "::ffff:1.2.3.4",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid IP address",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_email",
+  "input" : "ä@b.co",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid email",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_email",
+  "input" : "a@b.co",
+  "ok" : "a@b.co"
+}, {
+  "decoder" : "string_uuid",
+  "input" : "123E4567-E89B-12D3-A456-426614174000",
+  "ok" : "123e4567-e89b-12d3-a456-426614174000"
+}, {
+  "decoder" : "string_uuid",
+  "input" : "123e4567e89b12d3a456426614174000",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid UUID",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_uuid",
+  "input" : "{123e4567-e89b-12d3-a456-426614174000}",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid UUID",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_uuid",
+  "input" : "1-1-1-1-1",
+  "ok" : "00000001-0001-0001-0001-000000000001"
+}, {
+  "decoder" : "string_url",
+  "input" : "http://my_host.com",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid URL",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_url",
+  "input" : "https://example.com",
+  "ok" : "https://example.com"
+}, {
+  "decoder" : "string_url",
+  "input" : "https://日本.jp/",
+  "issues" : [ {
+    "path" : "",
+    "code" : "invalid_format",
+    "message_key" : "invalid_format",
+    "message" : "not a valid URL",
+    "meta" : { }
+  } ]
+}, {
+  "decoder" : "string_url",
+  "input" : "http://example.com:99999/",
+  "ok" : "http://example.com:99999/"
+}, {
+  "decoder" : "int",
+  "input_json" : "-0",
+  "ok" : 0
+}, {
+  "decoder" : "long",
+  "input_json" : "-0",
+  "ok" : 0
+}, {
+  "decoder" : "long",
+  "input_json" : "-0.0",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected long",
+    "meta" : {
+      "expected" : "long",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "long",
+  "input" : 1.0E30,
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected long",
+    "meta" : {
+      "expected" : "long",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "long",
+  "input_json" : "12345678901234567890",
+  "issues" : [ {
+    "path" : "",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected long",
+    "meta" : {
+      "expected" : "long",
+      "actual" : "number"
+    }
+  } ]
+}, {
+  "decoder" : "double_min_1e7",
+  "input" : 1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.minimum",
+    "message" : "must be at least 1.0E7",
+    "meta" : {
+      "actual" : 1.0,
+      "min" : 1.0E7
+    }
+  } ]
+}, {
+  "decoder" : "double_max_small",
+  "input" : 1,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.maximum",
+    "message" : "must be at most 1.0E-4",
+    "meta" : {
+      "max" : 1.0E-4,
+      "actual" : 1.0
+    }
+  } ]
+}, {
+  "decoder" : "double_one_of_big",
+  "input" : 3,
+  "issues" : [ {
+    "path" : "",
+    "code" : "not_allowed",
+    "message_key" : "not_allowed",
+    "message" : "must be one of [0.5, 1.0E7]",
+    "meta" : {
+      "allowed" : [ 0.5, 1.0E7 ],
+      "actual" : 3.0
+    }
+  } ]
+}, {
+  "decoder" : "decimal",
+  "input" : 1.0E-4,
+  "ok" : 0.00010
+}, {
+  "decoder" : "decimal_min_small",
+  "input" : 1.0E-4,
+  "issues" : [ {
+    "path" : "",
+    "code" : "out_of_range",
+    "message_key" : "out_of_range.minimum",
+    "message" : "must be at least 0.0005",
+    "meta" : {
+      "actual" : 0.00010,
+      "min" : 0.0005
+    }
+  } ]
+}, {
+  "decoder" : "optional_only",
+  "input" : {
+    "a" : "x"
+  },
+  "ok" : [ "x", null ]
+}, {
+  "decoder" : "optional_only",
+  "input" : { },
+  "ok" : [ null, null ]
+}, {
+  "decoder" : "optional_only",
+  "input" : "x",
+  "ok" : [ null, null ]
+}, {
+  "decoder" : "optional_only",
+  "input" : null,
+  "ok" : [ null, null ]
+}, {
+  "decoder" : "optional_only",
+  "input" : [ 1 ],
+  "ok" : [ null, null ]
+}, {
+  "decoder" : "shape",
+  "input" : "rect",
+  "issues" : [ {
+    "path" : "/kind",
+    "code" : "type_mismatch",
+    "message_key" : "type_mismatch",
+    "message" : "expected object",
+    "meta" : {
+      "expected" : "object",
       "actual" : "string"
     }
   } ]

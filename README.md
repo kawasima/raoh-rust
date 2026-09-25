@@ -117,16 +117,31 @@ Each issue has:
 - `path`: a JSON Pointer (RFC 6901), such as `/items/0/name`
 - `code`: what kind of problem it is, such as `required` or `out_of_range`
 - `message_key`: the code, or a refinement of it such as `out_of_range.minimum`
-- `message`: an English sentence, or a custom message given by the caller
 - `meta`: what else the code says, such as `min`, `max` and `actual`
 
-The codes, message keys and meta keys are the same as in Raoh for Java and raoh-php, so the same
-message catalogue and the same client-side handling work for all of them. `tests/compat` runs the
-same inputs through Raoh for Java and checks this crate gives the same issues.
+An issue carries no sentence of its own. `issue.message()` writes one from the English catalogue,
+and `issue.message_with(Messages::japanese())` from another. The only sentence an issue carries is
+one its creator gave with `with_message(...)`, which every language then shows as written:
 
-`Issues` keeps them in the order they were found. `flatten()` groups the messages by path,
-`to_json()` gives the `[{"path", "code", "message", "meta"}]` form, and `resolve(&resolver)`
-rewrites the messages in another language.
+```rust
+use raoh::{Issue, Messages};
+
+let built_in = Issue::new("too_short").with_meta("min", 3);
+assert_eq!(built_in.message_with(Messages::japanese()), "3文字以上で入力してください");
+
+let custom = Issue::new("checksum").with_message("the check digit does not match");
+assert_eq!(custom.message_with(Messages::japanese()), "the check digit does not match");
+```
+
+The codes and meta keys are the same as in Raoh for Java and raoh-php, so the same client-side
+handling works for all of them, and a catalogue written for Raoh for Java resolves these issues
+too. `tests/compat` runs the same inputs through Raoh for Java and checks this crate gives the same
+issues; the cases where it does not on purpose are listed there and under
+[Differences from Raoh for Java](#differences-from-raoh-for-java).
+
+`Issues` keeps them in the order they were found. `flatten()` groups the English messages by
+path, and `to_json()` gives the `[{"path", "code", "message", "meta"}]` form, which is also what
+`serde::Serialize` writes. `flatten_with` and `to_json_with` take another catalogue.
 
 ## Combining decoders
 
@@ -162,7 +177,7 @@ impl Period {
     pub fn new(start: i64, end: i64) -> Result<Self, Issue> {
         if start > end {
             let at: Pointer = ["end"].into_iter().collect();
-            return Err(Issue::new("invalid_value", "must not be before start").at(at));
+            return Err(Issue::new("invalid_value").with_message("must not be before start").at(at));
         }
         Ok(Self { start, end })
     }
@@ -212,8 +227,16 @@ so enable that feature in the application when decimals must be exact.
 
 `bool()`: `is_true`, `is_false`.
 
-Every one of them takes `.message("...")`, which gives the constraint written just before it a
-custom message that no resolver rewrites.
+Every one of them takes `.message("...")`, which gives the most recent constraint written before
+it a custom message. Transformations such as `trim` cannot fail and are passed over, so
+`string().trim().message("...")` gives the message to the type check, and
+`string().min_length(3).trim().message("...")` gives it to `min_length`.
+
+Whitespace, character counts, string order and number formatting follow Raoh for Java, which
+takes them from the JDK: `trim` removes the characters up to U+0020 as `String.trim()` does and
+keeps U+3000, `non_blank` decides whitespace as `Character.isWhitespace` does, lengths count code
+points, `one_of` sorts by UTF-16 code units, and a fractional bound appears in a message as
+`Double.toString` writes it, such as `1.0E7`.
 
 ## Objects, lists and maps
 
@@ -223,6 +246,10 @@ custom message that no resolver rewrites.
 - `d.nullable()`: `Option<T>`, `None` when the value is `null`
 - `d.list()`: `Vec<T>`, with `non_empty`, `min_size`, `max_size`, `size` and `unique`
 - `dict(d)`: `HashMap<String, T>` from an object used as a map
+
+`object` requires its input to be an object. Anything else is one issue at the object's own path:
+`required` for missing or `null`, `type_mismatch` otherwise. A field is not a decoder on its own,
+so `optional_field` never reads a scalar as an object without that member.
 
 A missing member and a `null` one are different inputs. `field("note", string().nullable())`
 accepts `null` but reports a missing member as `required`, while `optional_field` accepts a
@@ -310,9 +337,12 @@ assert!(tree.is_ok());
 
 ## Messages in other languages
 
-An issue is created with an English message. `Messages::japanese()` is the Japanese catalogue
-Raoh for Java ships, and `with_overrides` replaces templates by message key or code. A template's
-`{name}` placeholders are filled from `meta`.
+`Messages::english()` and `Messages::japanese()` hold the catalogues Raoh for Java ships, with the
+refined `invalid_format` keys added; the Japanese one falls back to English for a key it lacks.
+`with_overrides` replaces templates by message key or code, and `Messages::from_properties` reads
+a `.properties` file as Java's `Properties.load` does, `\uXXXX` escapes included, so an existing
+Raoh for Java catalogue can be used as it is. A template's `{name}` placeholders are filled from
+`meta`.
 
 ```rust
 use raoh::json::prelude::*;
@@ -329,6 +359,35 @@ Any `Fn(&Issue) -> String` is a resolver too.
 
 ## Differences from Raoh for Java
 
+In what it reports:
+
+- `object` checks once that its input is an object and reports one issue at its own path when it
+  is not. Raoh for Java checks in each field, reporting `type_mismatch` at every field's path and
+  reading a non-object as an object without any `optional_field`.
+- JSON Pointers are escaped as RFC 6901 says, as the Souther runtime does: a key `a/b` is written
+  `/a~1b`. Raoh for Java 0.7.2 writes `/a/b`.
+- The `invalid_format` issues of `email`, `url`, `uuid`, `ip`, `ipv4`, `ipv6`, `ulid`, `cuid`,
+  `starts_with`, `ends_with`, `contains`, `enum_of`, `literal` and text that is not JSON carry a
+  refined message key such as `invalid_format.email`. Raoh for Java gives them the key
+  `invalid_format` and tells them apart only by the English sentence it writes into the issue.
+  A catalogue with a template for `invalid_format` alone still resolves them.
+- `uuid()` parses with the `uuid` crate, which accepts 32 digits without hyphens and the form in
+  braces, and refuses Java's short groups such as `1-1-1-1-1`.
+- `url()` parses with the `url` crate, which follows the WHATWG URL Standard: it accepts `_` and
+  non-ASCII characters in a host, refuses a port above 65535, and normalises the URL, so
+  `https://example.com` becomes `https://example.com/`.
+- `pattern()` takes the syntax of the `regex` crate, where `\d`, `\w` and `\s` match Unicode
+  characters and Java's match ASCII only.
+- `serde_json` reads `-0.0` as the same float as `-0`, so the integer decoders read both as 0.
+  Raoh for Java refuses `-0.0`.
+- A fractional decimal bound outside 0.001 to 10⁷ appears in a message in exponent form, such as
+  `5.0E-4` where Raoh for Java writes `0.0005`, because `meta` holds it as a JSON number.
+- `strict()` reports unknown members in the order the `Value` keeps its keys. That is the input
+  order when `serde_json`'s `preserve_order` feature is enabled, as Raoh for Java reports them,
+  and sorted order otherwise.
+
+In the API:
+
 - Combining is done with tuples and `object`, not `combine`. There is no `nested`, because a
   member is handed to its decoder as a `Value` already.
 - `flatMap` is `and_then`, and there are no `Result`, `Ok` or `Err` types of its own: decoding
@@ -336,11 +395,6 @@ Any `Fn(&Issue) -> String` is a resolver too.
 - There is no encoder. Serde's `Serialize` covers that direction.
 - There is no domain construction guard (`raoh-gsh`). Private fields and module privacy stop a
   domain value from being built anywhere but its own module.
-- JSON Pointers are escaped as RFC 6901 says: a key `a/b` is written `/a~1b`. Raoh for Java 0.7.2
-  writes `/a/b`.
-- `strict()` reports unknown members in the order the `Value` keeps its keys. That is the input
-  order when `serde_json`'s `preserve_order` feature is enabled, as Raoh for Java reports them,
-  and sorted order otherwise.
 - There are no date and time decoders yet. `string().parse::<T>()` reads any type that implements
   `FromStr`, which includes the date types of `jiff` and `chrono`.
 
