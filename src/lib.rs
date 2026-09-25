@@ -53,4 +53,8 @@ pub use issue::{Issue, Issues};
 pub use message::{MessageResolver, Messages};
 pub use path::{Path, Pointer, Segment};
 pub use presence::Presence;
+
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+struct ReadmeDoctests;
 pub use vocabulary::{codes, message_keys};

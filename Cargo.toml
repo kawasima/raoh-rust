@@ -9,6 +9,7 @@ repository = "https://github.com/kawasima/raoh-rust"
 readme = "README.md"
 keywords = ["decoder", "validation", "json", "parse", "domain"]
 categories = ["parsing", "encoding"]
+exclude = [".github/", "scripts/"]
 
 [dependencies]
 serde = "1"
