@@ -28,7 +28,11 @@ public class Generate {
 
     enum Color { RED, GREEN }
 
-    static final JsonMapper MAPPER = JsonMapper.builder().build();
+    // Map.of iterates in an order that changes from run to run; sorting the keys keeps the
+    // generated file the same when nothing it records has changed.
+    static final JsonMapper MAPPER = JsonMapper.builder()
+            .enable(tools.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+            .build();
 
     static Decoder<JsonNode, ?> decoder(String name) {
         return switch (name) {

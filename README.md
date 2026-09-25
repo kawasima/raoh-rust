@@ -232,11 +232,11 @@ it a custom message. Transformations such as `trim` cannot fail and are passed o
 `string().trim().message("...")` gives the message to the type check, and
 `string().min_length(3).trim().message("...")` gives it to `min_length`.
 
-Whitespace, character counts, string order and number formatting follow Raoh for Java, which
-takes them from the JDK: `trim` removes the characters up to U+0020 as `String.trim()` does and
-keeps U+3000, `non_blank` decides whitespace as `Character.isWhitespace` does, lengths count code
-points, `one_of` sorts by UTF-16 code units, and a fractional bound appears in a message as
-`Double.toString` writes it, such as `1.0E7`.
+Whitespace, character counts, string order and number formatting follow Raoh for Java: `trim`
+removes the characters up to U+0020 as `String.trim()` does and keeps U+3000, `non_blank` decides
+whitespace as `Character.isWhitespace` does, lengths count code points, `one_of` and
+`discriminate` sort by code point as Raoh for Java's `CodePointOrder` does, and a fractional bound
+appears in a message as `Double.toString` writes it, such as `1.0E7`.
 
 ## Objects, lists and maps
 

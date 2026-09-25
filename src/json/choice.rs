@@ -2,7 +2,6 @@ use super::object::{Field, Object, field, object};
 use super::string::{StringDecoder, string};
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
-use crate::java;
 use crate::path::Path;
 use crate::{codes, message_keys};
 use serde_json::Value;
@@ -87,7 +86,7 @@ impl Decoder<Value> for Literal {
 ///
 /// `variants` is a tuple of [`variant`]s with the same output. The input must be an object, as
 /// [`object`] requires. A missing tag is `required` at the tag's path, and a tag naming none of
-/// the variants is `not_allowed` there, with the tags sorted as Java sorts strings as `allowed`.
+/// the variants is `not_allowed` there, with the tags sorted by code point as `allowed`.
 ///
 /// ```
 /// use raoh::json::prelude::*;
@@ -121,7 +120,7 @@ pub fn discriminate<V: Variants>(
         }
     }
     let mut allowed: Vec<String> = tags.into_iter().map(str::to_owned).collect();
-    java::sort_strings(&mut allowed);
+    allowed.sort();
     Discriminate {
         tag: object((field(tag_field.clone(), string()),)),
         tag_field,

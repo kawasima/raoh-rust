@@ -2,14 +2,15 @@
 //!
 //! Where a built-in decoder does what Raoh for Java does with a JDK method, it calls the function
 //! here rather than the Rust method with the same name: `str::trim`, `char::is_whitespace`,
-//! `str::cmp`, `f64`'s `Display` and `std::net::Ipv6Addr` each differ from their JDK counterparts
-//! on some input. Each function names the JDK method it follows, and the tests pin the inputs on
+//! `f64`'s `Display` and `std::net::Ipv6Addr` each differ from their JDK counterparts on some
+//! input. Each function names the JDK method it follows, and the tests pin the inputs on
 //! which the two differ.
 //!
 //! Operations whose output is a Rust type parsed by a Rust crate (`uuid()`, `url()`, `pattern()`)
 //! are not here: they follow that crate, and the README lists where that differs from Java.
-
-use std::cmp::Ordering;
+//!
+//! Strings are sorted by code point, as `str` sorts them. Raoh for Java sorts them the same way
+//! through its `CodePointOrder`, rather than by UTF-16 code unit as `String.compareTo` does.
 
 /// `String.trim()`: removes every code point up to U+0020 from both ends, and nothing else.
 pub(crate) fn trim(s: &str) -> &str {
@@ -39,20 +40,6 @@ pub(crate) fn is_blank(s: &str) -> bool {
 /// `String.length()`: the number of UTF-16 code units.
 pub(crate) fn utf16_len(s: &str) -> usize {
     s.encode_utf16().count()
-}
-
-/// `String.compareTo`: the order of UTF-16 code units, which `TreeSet` and `sorted()` use.
-///
-/// It differs from `str`'s order, which is that of code points, where a character above U+FFFF
-/// meets one in U+E000–U+FFFF.
-pub(crate) fn compare(a: &str, b: &str) -> Ordering {
-    a.encode_utf16().cmp(b.encode_utf16())
-}
-
-/// Sorts and removes duplicates in [`compare`]'s order.
-pub(crate) fn sort_strings(strings: &mut Vec<String>) {
-    strings.sort_by(|a, b| compare(a, b));
-    strings.dedup();
 }
 
 /// `Double.toString(double)`: the shortest decimal that reads back as `v`, written plainly with at
@@ -260,12 +247,6 @@ mod tests {
         assert!(is_blank(""));
         assert!(is_blank(" \u{3000}"));
         assert!(!is_blank("\u{a0}"));
-    }
-
-    #[test]
-    fn strings_compare_by_utf16_units() {
-        assert_eq!(compare("\u{1f600}", "\u{ff21}"), Ordering::Less);
-        assert_eq!("\u{1f600}".cmp("\u{ff21}"), Ordering::Greater);
     }
 
     #[test]

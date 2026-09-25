@@ -206,11 +206,11 @@ impl StringDecoder {
         self
     }
 
-    /// Requires one of `allowed`: `not_allowed` with `allowed` sorted as Java sorts strings, by
-    /// UTF-16 code units, and `actual`.
+    /// Requires one of `allowed`: `not_allowed` with `allowed` sorted by code point, and `actual`.
     pub fn one_of<S: Into<String>>(mut self, allowed: impl IntoIterator<Item = S>) -> Self {
         let mut allowed: Vec<String> = allowed.into_iter().map(Into::into).collect();
-        java::sort_strings(&mut allowed);
+        allowed.sort();
+        allowed.dedup();
         let check = allowed.clone();
         self.steps.require(
             move |s| check.contains(s),
@@ -575,14 +575,14 @@ mod tests {
     }
 
     #[test]
-    fn one_of_sorts_as_java_does() {
+    fn one_of_sorts_by_code_point() {
         let issue = first(
             string()
-                .one_of(["\u{ff21}", "\u{1f600}"])
+                .one_of(["\u{1f600}", "\u{ff21}"])
                 .decode(&json!("z")),
         );
-        assert_eq!(issue.meta()["allowed"], json!(["\u{1f600}", "\u{ff21}"]));
-        assert_eq!(issue.message(), "must be one of [\u{1f600}, \u{ff21}]");
+        assert_eq!(issue.meta()["allowed"], json!(["\u{ff21}", "\u{1f600}"]));
+        assert_eq!(issue.message(), "must be one of [\u{ff21}, \u{1f600}]");
     }
 
     #[test]
