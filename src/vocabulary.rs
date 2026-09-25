@@ -80,9 +80,8 @@ pub mod codes {
 /// template only for the code still resolves it. An issue whose message key is not one of these
 /// uses its code as its key.
 ///
-/// The `out_of_range` and `too_small` keys are Raoh for Java's. The `invalid_format` ones are this
-/// crate's: Raoh for Java gives those issues the key `invalid_format` and tells them apart only
-/// by the English sentence it writes into them, which a catalogue cannot look up.
+/// These are the keys of Raoh for Java, from 0.7.3 on, for the checks this crate shares with it.
+/// `invalid_format.json` is this crate's own, for text that is not JSON.
 pub mod message_keys {
     /// `out_of_range` from a lower bound.
     pub const OUT_OF_RANGE_MINIMUM: &str = "out_of_range.minimum";

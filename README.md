@@ -132,7 +132,8 @@ let custom = Issue::new("checksum").with_message("the check digit does not match
 assert_eq!(custom.message_with(Messages::japanese()), "the check digit does not match");
 ```
 
-The codes and meta keys are the same as in Raoh for Java and raoh-php, so the same client-side
+The codes, message keys and meta keys are the same as in Raoh for Java from 0.7.3 on, and the
+codes and meta keys the same as in raoh-php, so the same client-side
 handling works for all of them, and a catalogue written for Raoh for Java resolves these issues
 too. `tests/compat` runs the same inputs through Raoh for Java and checks this crate gives the same
 issues; the cases where it does not on purpose are listed there and under
@@ -336,8 +337,9 @@ assert!(tree.is_ok());
 
 ## Messages in other languages
 
-`Messages::english()` and `Messages::japanese()` hold the catalogues Raoh for Java ships, with the
-refined `invalid_format` keys added; the Japanese one falls back to English for a key it lacks.
+`Messages::english()` and `Messages::japanese()` hold the catalogues Raoh for Java ships, word for
+word, plus a template for `invalid_format.json`; the Japanese one falls back to English for a key
+it lacks.
 `with_overrides` replaces templates by message key or code, and `Messages::from_properties` reads
 a `.properties` file as Java's `Properties.load` does, `\uXXXX` escapes included, so an existing
 Raoh for Java catalogue can be used as it is. A template's `{name}` placeholders are filled from
@@ -365,11 +367,6 @@ In what it reports:
   reading a non-object as an object without any `optional_field`.
 - JSON Pointers are escaped as RFC 6901 says, as the Souther runtime does: a key `a/b` is written
   `/a~1b`. Raoh for Java 0.7.2 writes `/a/b`.
-- The `invalid_format` issues of `email`, `url`, `uuid`, `ip`, `ipv4`, `ipv6`, `ulid`, `cuid`,
-  `starts_with`, `ends_with`, `contains`, `enum_of`, `literal` and text that is not JSON carry a
-  refined message key such as `invalid_format.email`. Raoh for Java gives them the key
-  `invalid_format` and tells them apart only by the English sentence it writes into the issue.
-  A catalogue with a template for `invalid_format` alone still resolves them.
 - `uuid()` parses with the `uuid` crate, which accepts 32 digits without hyphens and the form in
   braces, and refuses Java's short groups such as `1-1-1-1-1`.
 - `url()` parses with the `url` crate, which follows the WHATWG URL Standard: it accepts `_` and
@@ -403,8 +400,9 @@ In the API:
 cargo test --all-features
 ```
 
-`scripts/compat/generate.sh` regenerates `tests/compat/expected.json` from Raoh for Java. It needs
-Java 25 and Maven.
+`scripts/compat/generate.sh` regenerates `tests/compat/expected.json` and copies the message
+catalogues from the Raoh for Java version `scripts/compat/pom.xml` names. It needs Java 25 and
+Maven.
 
 ## License
 

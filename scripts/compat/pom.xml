@@ -10,7 +10,7 @@
     <dependency>
       <groupId>net.unit8.raoh</groupId>
       <artifactId>raoh-json</artifactId>
-      <version>0.7.2</version>
+      <version>0.7.3-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>tools.jackson.core</groupId>

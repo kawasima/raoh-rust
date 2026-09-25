@@ -21,8 +21,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected string",
     "meta" : {
-      "expected" : "string",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "string"
     }
   } ]
 }, {
@@ -34,8 +34,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected string",
     "meta" : {
-      "expected" : "string",
-      "actual" : "array"
+      "actual" : "array",
+      "expected" : "string"
     }
   } ]
 }, {
@@ -48,7 +48,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.email",
     "message" : "not a valid email",
     "meta" : { }
   } ]
@@ -81,8 +81,8 @@
     "message_key" : "too_short",
     "message" : "must be at least 3 characters",
     "meta" : {
-      "actual" : 2,
-      "min" : 3
+      "min" : 3,
+      "actual" : 2
     }
   } ]
 }, {
@@ -98,8 +98,8 @@
     "message_key" : "too_long",
     "message" : "must be at most 3 characters",
     "meta" : {
-      "max" : 3,
-      "actual" : 4
+      "actual" : 4,
+      "max" : 3
     }
   } ]
 }, {
@@ -111,8 +111,8 @@
     "message_key" : "invalid_length",
     "message" : "must be exactly 4 characters",
     "meta" : {
-      "expected" : 4,
-      "actual" : 3
+      "actual" : 3,
+      "expected" : 4
     }
   } ]
 }, {
@@ -124,8 +124,8 @@
     "message_key" : "not_allowed",
     "message" : "must be one of [a, b]",
     "meta" : {
-      "allowed" : [ "a", "b" ],
-      "actual" : "c"
+      "actual" : "c",
+      "allowed" : [ "a", "b" ]
     }
   } ]
 }, {
@@ -138,7 +138,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.starts_with",
     "message" : "must start with \"ab\"",
     "meta" : {
       "prefix" : "ab"
@@ -150,7 +150,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ends_with",
     "message" : "must end with \"ab\"",
     "meta" : {
       "suffix" : "ab"
@@ -162,7 +162,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.includes",
     "message" : "must include \"ab\"",
     "meta" : {
       "substring" : "ab"
@@ -178,7 +178,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ipv4",
     "message" : "not a valid IPv4 address",
     "meta" : { }
   } ]
@@ -192,7 +192,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ipv6",
     "message" : "not a valid IPv6 address",
     "meta" : { }
   } ]
@@ -206,7 +206,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ip",
     "message" : "not a valid IP address",
     "meta" : { }
   } ]
@@ -220,7 +220,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ulid",
     "message" : "not a valid ULID",
     "meta" : { }
   } ]
@@ -234,7 +234,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.cuid",
     "message" : "not a valid CUID",
     "meta" : { }
   } ]
@@ -264,7 +264,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.uuid",
     "message" : "not a valid UUID",
     "meta" : { }
   } ]
@@ -278,7 +278,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.url",
     "message" : "not a valid URL",
     "meta" : { }
   } ]
@@ -288,7 +288,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.url",
     "message" : "not a valid URL",
     "meta" : { }
   } ]
@@ -315,8 +315,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -340,8 +340,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "boolean"
+      "actual" : "boolean",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -353,8 +353,8 @@
     "message_key" : "out_of_range.minimum",
     "message" : "must be at least 1",
     "meta" : {
-      "actual" : 0,
-      "min" : 1
+      "min" : 1,
+      "actual" : 0
     }
   } ]
 }, {
@@ -366,8 +366,8 @@
     "message_key" : "out_of_range.maximum",
     "message" : "must be at most 10",
     "meta" : {
-      "max" : 10,
-      "actual" : 11
+      "actual" : 11,
+      "max" : 10
     }
   } ]
 }, {
@@ -379,8 +379,8 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0 and 150",
     "meta" : {
-      "max" : 150,
       "actual" : 200,
+      "max" : 150,
       "min" : 0
     }
   } ]
@@ -393,8 +393,8 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0 and 150",
     "meta" : {
-      "max" : 150,
       "actual" : -1,
+      "max" : 150,
       "min" : 0
     }
   } ]
@@ -411,8 +411,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "actual" : 0,
-      "min" : 1
+      "min" : 1,
+      "actual" : 0
     }
   } ]
 }, {
@@ -424,8 +424,8 @@
     "message_key" : "out_of_range.negative",
     "message" : "must be negative",
     "meta" : {
-      "max" : -1,
-      "actual" : 0
+      "actual" : 0,
+      "max" : -1
     }
   } ]
 }, {
@@ -437,8 +437,8 @@
     "message_key" : "out_of_range.non_negative",
     "message" : "must be non-negative",
     "meta" : {
-      "actual" : -1,
-      "min" : 0
+      "min" : 0,
+      "actual" : -1
     }
   } ]
 }, {
@@ -450,8 +450,8 @@
     "message_key" : "out_of_range.non_positive",
     "message" : "must be non-positive",
     "meta" : {
-      "max" : 0,
-      "actual" : 1
+      "actual" : 1,
+      "max" : 0
     }
   } ]
 }, {
@@ -463,8 +463,8 @@
     "message_key" : "not_multiple_of",
     "message" : "must be a multiple of 3",
     "meta" : {
-      "actual" : 4,
-      "divisor" : 3
+      "divisor" : 3,
+      "actual" : 4
     }
   } ]
 }, {
@@ -476,8 +476,8 @@
     "message_key" : "not_allowed",
     "message" : "must be one of [1, 3]",
     "meta" : {
-      "allowed" : [ 1, 3 ],
-      "actual" : 2
+      "actual" : 2,
+      "allowed" : [ 1, 3 ]
     }
   } ]
 }, {
@@ -493,8 +493,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected long",
     "meta" : {
-      "expected" : "long",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "long"
     }
   } ]
 }, {
@@ -506,8 +506,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected long",
     "meta" : {
-      "expected" : "long",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "long"
     }
   } ]
 }, {
@@ -527,8 +527,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected double",
     "meta" : {
-      "expected" : "double",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "double"
     }
   } ]
 }, {
@@ -540,8 +540,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "actual" : 0.0,
-      "min" : 0.0
+      "min" : 0.0,
+      "actual" : 0.0
     }
   } ]
 }, {
@@ -553,8 +553,8 @@
     "message_key" : "out_of_range.negative",
     "message" : "must be negative",
     "meta" : {
-      "max" : 0.0,
-      "actual" : 0.5
+      "actual" : 0.5,
+      "max" : 0.0
     }
   } ]
 }, {
@@ -566,8 +566,8 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0.5 and 1.5",
     "meta" : {
-      "max" : 1.5,
       "actual" : 2.0,
+      "max" : 1.5,
       "min" : 0.5
     }
   } ]
@@ -580,8 +580,8 @@
     "message_key" : "out_of_range.minimum",
     "message" : "must be at least 0.5",
     "meta" : {
-      "actual" : 0.25,
-      "min" : 0.5
+      "min" : 0.5,
+      "actual" : 0.25
     }
   } ]
 }, {
@@ -593,8 +593,8 @@
     "message_key" : "not_allowed",
     "message" : "must be one of [1.0, 2.0]",
     "meta" : {
-      "allowed" : [ 1.0, 2.0 ],
-      "actual" : 3.0
+      "actual" : 3.0,
+      "allowed" : [ 1.0, 2.0 ]
     }
   } ]
 }, {
@@ -610,8 +610,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected number",
     "meta" : {
-      "expected" : "number",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "number"
     }
   } ]
 }, {
@@ -623,8 +623,8 @@
     "message_key" : "invalid_scale",
     "message" : "too many decimal places (max 2)",
     "meta" : {
-      "actualScale" : 3,
-      "maxScale" : 2
+      "maxScale" : 2,
+      "actualScale" : 3
     }
   } ]
 }, {
@@ -636,8 +636,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "actual" : 0,
-      "min" : 0
+      "min" : 0,
+      "actual" : 0
     }
   } ]
 }, {
@@ -649,8 +649,8 @@
     "message_key" : "out_of_range.range",
     "message" : "must be between 0 and 10",
     "meta" : {
-      "max" : 10,
       "actual" : 10.5,
+      "max" : 10,
       "min" : 0
     }
   } ]
@@ -667,8 +667,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected boolean",
     "meta" : {
-      "expected" : "boolean",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "boolean"
     }
   } ]
 }, {
@@ -690,8 +690,8 @@
     "message_key" : "invalid_value",
     "message" : "must be true",
     "meta" : {
-      "expected" : true,
-      "actual" : false
+      "actual" : false,
+      "expected" : true
     }
   } ]
 }, {
@@ -707,8 +707,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   }, {
     "path" : "/3",
@@ -728,8 +728,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected array",
     "meta" : {
-      "expected" : "array",
-      "actual" : "object"
+      "actual" : "object",
+      "expected" : "array"
     }
   } ]
 }, {
@@ -751,8 +751,8 @@
     "message_key" : "too_small.nonempty",
     "message" : "must not be empty",
     "meta" : {
-      "actual" : 0,
-      "min" : 1
+      "min" : 1,
+      "actual" : 0
     }
   } ]
 }, {
@@ -764,8 +764,8 @@
     "message_key" : "too_small",
     "message" : "must have at least 2 elements",
     "meta" : {
-      "actual" : 1,
-      "min" : 2
+      "min" : 2,
+      "actual" : 1
     }
   } ]
 }, {
@@ -777,8 +777,8 @@
     "message_key" : "too_big",
     "message" : "must have at most 2 elements",
     "meta" : {
-      "max" : 2,
-      "actual" : 3
+      "actual" : 3,
+      "max" : 2
     }
   } ]
 }, {
@@ -790,8 +790,8 @@
     "message_key" : "invalid_size",
     "message" : "must have exactly 2 elements",
     "meta" : {
-      "expected" : 2,
-      "actual" : 1
+      "actual" : 1,
+      "expected" : 2
     }
   } ]
 }, {
@@ -841,8 +841,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected string",
     "meta" : {
-      "expected" : "string",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "string"
     }
   }, {
     "path" : "/age",
@@ -850,8 +850,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -863,8 +863,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "array"
+      "actual" : "array",
+      "expected" : "object"
     }
   }, {
     "path" : "/age",
@@ -872,8 +872,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "array"
+      "actual" : "array",
+      "expected" : "object"
     }
   } ]
 }, {
@@ -885,8 +885,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "null"
+      "actual" : "null",
+      "expected" : "object"
     }
   }, {
     "path" : "/age",
@@ -894,8 +894,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "null"
+      "actual" : "null",
+      "expected" : "object"
     }
   } ]
 }, {
@@ -907,8 +907,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "object"
     }
   }, {
     "path" : "/age",
@@ -916,8 +916,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "object"
     }
   } ]
 }, {
@@ -958,8 +958,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected string",
     "meta" : {
-      "expected" : "string",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "string"
     }
   }, {
     "path" : "/extra",
@@ -979,8 +979,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "array"
+      "actual" : "array",
+      "expected" : "object"
     }
   }, {
     "path" : "/age",
@@ -988,8 +988,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "array"
+      "actual" : "array",
+      "expected" : "object"
     }
   } ]
 }, {
@@ -1046,8 +1046,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected string",
     "meta" : {
-      "expected" : "string",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "string"
     }
   } ]
 }, {
@@ -1110,8 +1110,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -1139,8 +1139,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   }, {
     "path" : "/items/2/name",
@@ -1154,8 +1154,8 @@
     "message_key" : "out_of_range.positive",
     "message" : "must be positive",
     "meta" : {
-      "actual" : 0,
-      "min" : 1
+      "min" : 1,
+      "actual" : 0
     }
   } ]
 }, {
@@ -1169,8 +1169,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected array",
     "meta" : {
-      "expected" : "array",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "array"
     }
   } ]
 }, {
@@ -1186,8 +1186,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -1199,8 +1199,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "array"
+      "actual" : "array",
+      "expected" : "object"
     }
   } ]
 }, {
@@ -1213,7 +1213,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.enum",
     "message" : "invalid value",
     "meta" : {
       "allowed" : [ "red", "green" ]
@@ -1228,8 +1228,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected string",
     "meta" : {
-      "expected" : "string",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "string"
     }
   } ]
 }, {
@@ -1242,7 +1242,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.literal",
     "message" : "invalid value",
     "meta" : {
       "expected" : "v1"
@@ -1292,8 +1292,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   }, {
     "path" : "/h",
@@ -1320,27 +1320,27 @@
     "message" : "no variant matched",
     "meta" : {
       "candidates" : [ {
-        "candidate" : 0,
         "issues" : [ {
           "path" : "",
           "code" : "type_mismatch",
           "message" : "expected integer",
           "meta" : {
-            "expected" : "integer",
-            "actual" : "string"
+            "actual" : "string",
+            "expected" : "integer"
           }
-        } ]
+        } ],
+        "candidate" : 0
       }, {
-        "candidate" : 1,
         "issues" : [ {
           "path" : "",
           "code" : "too_short",
           "message" : "must be at least 3 characters",
           "meta" : {
-            "actual" : 2,
-            "min" : 3
+            "min" : 3,
+            "actual" : 2
           }
-        } ]
+        } ],
+        "candidate" : 1
       } ]
     }
   } ]
@@ -1365,8 +1365,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -1407,8 +1407,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   }, {
     "path" : "/end",
@@ -1416,8 +1416,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected integer",
     "meta" : {
-      "expected" : "integer",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "integer"
     }
   } ]
 }, {
@@ -1499,8 +1499,8 @@
     "message_key" : "too_short",
     "message" : "must be at least 3 characters",
     "meta" : {
-      "actual" : 2,
-      "min" : 3
+      "min" : 3,
+      "actual" : 2
     }
   } ]
 }, {
@@ -1512,8 +1512,8 @@
     "message_key" : "too_long",
     "message" : "must be at most 3 characters",
     "meta" : {
-      "max" : 3,
-      "actual" : 4
+      "actual" : 4,
+      "max" : 3
     }
   } ]
 }, {
@@ -1525,8 +1525,8 @@
     "message_key" : "not_allowed",
     "message" : "must be one of [😀, Ａ]",
     "meta" : {
-      "allowed" : [ "😀", "Ａ" ],
-      "actual" : "z"
+      "actual" : "z",
+      "allowed" : [ "😀", "Ａ" ]
     }
   } ]
 }, {
@@ -1551,7 +1551,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ipv6",
     "message" : "not a valid IPv6 address",
     "meta" : { }
   } ]
@@ -1573,7 +1573,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ipv6",
     "message" : "not a valid IPv6 address",
     "meta" : { }
   } ]
@@ -1583,7 +1583,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.ip",
     "message" : "not a valid IP address",
     "meta" : { }
   } ]
@@ -1593,7 +1593,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.email",
     "message" : "not a valid email",
     "meta" : { }
   } ]
@@ -1611,7 +1611,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.uuid",
     "message" : "not a valid UUID",
     "meta" : { }
   } ]
@@ -1621,7 +1621,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.uuid",
     "message" : "not a valid UUID",
     "meta" : { }
   } ]
@@ -1635,7 +1635,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.url",
     "message" : "not a valid URL",
     "meta" : { }
   } ]
@@ -1649,7 +1649,7 @@
   "issues" : [ {
     "path" : "",
     "code" : "invalid_format",
-    "message_key" : "invalid_format",
+    "message_key" : "invalid_format.url",
     "message" : "not a valid URL",
     "meta" : { }
   } ]
@@ -1674,8 +1674,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected long",
     "meta" : {
-      "expected" : "long",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "long"
     }
   } ]
 }, {
@@ -1687,8 +1687,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected long",
     "meta" : {
-      "expected" : "long",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "long"
     }
   } ]
 }, {
@@ -1700,8 +1700,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected long",
     "meta" : {
-      "expected" : "long",
-      "actual" : "number"
+      "actual" : "number",
+      "expected" : "long"
     }
   } ]
 }, {
@@ -1713,8 +1713,8 @@
     "message_key" : "out_of_range.minimum",
     "message" : "must be at least 1.0E7",
     "meta" : {
-      "actual" : 1.0,
-      "min" : 1.0E7
+      "min" : 1.0E7,
+      "actual" : 1.0
     }
   } ]
 }, {
@@ -1726,8 +1726,8 @@
     "message_key" : "out_of_range.maximum",
     "message" : "must be at most 1.0E-4",
     "meta" : {
-      "max" : 1.0E-4,
-      "actual" : 1.0
+      "actual" : 1.0,
+      "max" : 1.0E-4
     }
   } ]
 }, {
@@ -1739,8 +1739,8 @@
     "message_key" : "not_allowed",
     "message" : "must be one of [0.5, 1.0E7]",
     "meta" : {
-      "allowed" : [ 0.5, 1.0E7 ],
-      "actual" : 3.0
+      "actual" : 3.0,
+      "allowed" : [ 0.5, 1.0E7 ]
     }
   } ]
 }, {
@@ -1756,8 +1756,8 @@
     "message_key" : "out_of_range.minimum",
     "message" : "must be at least 0.0005",
     "meta" : {
-      "actual" : 0.00010,
-      "min" : 0.0005
+      "min" : 0.0005,
+      "actual" : 0.00010
     }
   } ]
 }, {
@@ -1791,8 +1791,8 @@
     "message_key" : "type_mismatch",
     "message" : "expected object",
     "meta" : {
-      "expected" : "object",
-      "actual" : "string"
+      "actual" : "string",
+      "expected" : "object"
     }
   } ]
 } ]

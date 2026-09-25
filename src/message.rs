@@ -101,6 +101,11 @@ impl Messages {
         Self { templates }
     }
 
+    /// Every key and its template, in no particular order.
+    pub fn templates(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.templates.iter().map(|(k, t)| (k.as_str(), t.as_str()))
+    }
+
     /// The template under `key`, if there is one.
     pub fn template(&self, key: &str) -> Option<&str> {
         self.templates.get(key).map(String::as_str)

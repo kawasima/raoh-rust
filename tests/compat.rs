@@ -6,7 +6,7 @@
 //! gives its output as the JSON the Java one's output serializes to.
 
 use raoh::json::prelude::*;
-use raoh::{BoxDecoder, Issue};
+use raoh::{BoxDecoder, Issue, Messages};
 use serde::Serialize;
 
 fn out<D>(decoder: D) -> BoxDecoder<Value, Value>
@@ -352,28 +352,6 @@ fn divergences() -> Vec<(&'static str, Value, Value, &'static str)> {
     list
 }
 
-/// Java gives `invalid_format` issues the key `invalid_format`; this crate refines it, as
-/// `invalid_format.email`, so a catalogue can tell them apart. A refined key stands for its
-/// parent here.
-fn with_parent_keys(mut actual: Value, wanted: &Value) -> Value {
-    if let (Some(ours), Some(theirs)) = (
-        actual.get_mut("issues").and_then(Value::as_array_mut),
-        wanted.get("issues").and_then(Value::as_array),
-    ) {
-        for (ours, theirs) in ours.iter_mut().zip(theirs) {
-            let (Some(our_key), Some(their_key)) =
-                (ours["message_key"].as_str(), theirs["message_key"].as_str())
-            else {
-                continue;
-            };
-            if our_key.starts_with(&format!("{their_key}.")) {
-                ours["message_key"] = json!(their_key);
-            }
-        }
-    }
-    actual
-}
-
 #[test]
 fn every_case_gives_what_raoh_for_java_gives() {
     let expected: Vec<Value> = serde_json::from_str(include_str!("compat/expected.json")).unwrap();
@@ -406,7 +384,7 @@ fn every_case_gives_what_raoh_for_java_gives() {
             }
             None => java,
         };
-        let actual = with_parent_keys(outcome(decoder.decode(&input)), &wanted);
+        let actual = outcome(decoder.decode(&input));
         if actual != wanted {
             mismatches.push(format!("{name} {key}\n  want: {wanted}\n  rust: {actual}"));
         }
@@ -427,4 +405,27 @@ fn every_case_gives_what_raoh_for_java_gives() {
         expected.len(),
         mismatches.join("\n")
     );
+}
+
+/// Every template of Raoh for Java's catalogues is in this crate's, word for word, under the
+/// same key; the copies in `tests/compat/java/` come from the jar `generate.sh` ran.
+#[test]
+fn the_catalogues_hold_raoh_for_javas_templates() {
+    let pairs = [
+        (
+            include_str!("compat/java/messages.properties"),
+            Messages::english(),
+        ),
+        (
+            include_str!("compat/java/messages_ja.properties"),
+            Messages::japanese(),
+        ),
+    ];
+    for (java, ours) in pairs {
+        let java = Messages::from_properties(java).unwrap();
+        assert!(java.templates().count() > 40);
+        for (key, template) in java.templates() {
+            assert_eq!(ours.template(key), Some(template), "{key}");
+        }
+    }
 }
