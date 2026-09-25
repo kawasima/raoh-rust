@@ -13,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned because trybuild compares against the compiler's exact output, which changes
+      # between releases. Regenerate tests/ui/*.stderr with TRYBUILD=overwrite when moving it.
+      - uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt, clippy
       - run: cargo fmt --check
@@ -30,5 +32,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.85
       # url pulls in dependencies that need a newer compiler, and trybuild's expected
-      # compiler output is that of the stable toolchain, so both are left to the job above.
+      # compiler output is that of the job above, so both are left to it.
       - run: cargo test --features regex,decimal,uuid --lib --test compat --test combinators
