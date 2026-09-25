@@ -38,8 +38,7 @@ Optional features:
 | `uuid`    | `string().uuid()`, decoding into `uuid::Uuid`               |
 | `url`     | `string().url()`, decoding into `url::Url`                  |
 
-The minimum supported Rust version is 1.85. The `url` feature depends on the `url` crate, whose
-own dependencies may need a newer compiler.
+The minimum supported Rust version is 1.87, with every feature.
 
 ## Quick start
 

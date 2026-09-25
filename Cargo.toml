@@ -2,7 +2,7 @@
 name = "raoh"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 license = "Apache-2.0"
 description = "Decoders that turn untyped JSON into typed domain values, reporting every issue with its path"
 repository = "https://github.com/kawasima/raoh-rust"

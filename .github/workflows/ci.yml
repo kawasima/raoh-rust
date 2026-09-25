@@ -30,7 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85
-      # url pulls in dependencies that need a newer compiler, and trybuild's expected
-      # compiler output is that of the job above, so both are left to it.
-      - run: cargo test --features regex,decimal,uuid --lib --test compat --test combinators
+      - uses: dtolnay/rust-toolchain@1.87
+      # Resolve afresh, as a user of the crate does, so what is tested is what they get: the
+      # MSRV-aware resolver picks versions compatible with rust-version where it can.
+      - run: cargo generate-lockfile
+      # trybuild's expected compiler output is that of the job above, so it runs only there.
+      - run: cargo test --all-features --lib --test compat --test combinators
+      - run: cargo test --all-features --doc
