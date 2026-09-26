@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt;
 
 /// One problem found in the input: where it is, what kind it is, and what else its code says.
@@ -36,7 +37,7 @@ struct Inner {
     path: Pointer,
     code: Cow<'static, str>,
     message_key: Cow<'static, str>,
-    meta: Map<String, Value>,
+    meta: BTreeMap<String, Value>,
     message: Option<String>,
 }
 
@@ -52,7 +53,7 @@ impl Issue {
                 path: Pointer::root(),
                 message_key: code.clone(),
                 code,
-                meta: Map::new(),
+                meta: BTreeMap::new(),
                 message: None,
             }),
         }
@@ -103,8 +104,9 @@ impl Issue {
         &self.inner.message_key
     }
 
-    /// What else the code says about the problem, such as the bound a value fell outside of.
-    pub fn meta(&self) -> &Map<String, Value> {
+    /// What else the code says about the problem, such as the bound a value fell outside of,
+    /// in the order of its keys, as Raoh for Java keeps it.
+    pub fn meta(&self) -> &BTreeMap<String, Value> {
         &self.inner.meta
     }
 
@@ -139,7 +141,8 @@ impl Issue {
         object.insert("path".into(), self.inner.path.to_string().into());
         object.insert("code".into(), self.code().into());
         object.insert("message".into(), self.message_with(resolver).into());
-        object.insert("meta".into(), Value::Object(self.inner.meta.clone()));
+        let meta: Map<String, Value> = self.inner.meta.clone().into_iter().collect();
+        object.insert("meta".into(), Value::Object(meta));
         Value::Object(object)
     }
 }

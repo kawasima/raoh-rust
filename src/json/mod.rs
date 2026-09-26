@@ -13,6 +13,7 @@ mod choice;
 mod decimal;
 mod dict;
 mod ext;
+mod ip;
 mod number;
 mod object;
 mod steps;

@@ -825,5 +825,49 @@
   {
     "decoder": "shape",
     "input": "rect"
+  },
+  {
+    "decoder": "string_ipv6",
+    "input": "::1%lo0"
+  },
+  {
+    "decoder": "string_ipv6",
+    "input": "fe80::1%eth0"
+  },
+  {
+    "decoder": "string_ipv6",
+    "input": "ff0e::1%x"
+  },
+  {
+    "decoder": "string_ipv6",
+    "input": "ff02::1%x"
+  },
+  {
+    "decoder": "string_ipv6",
+    "input": "::00001"
+  },
+  {
+    "decoder": "string_ipv6",
+    "input": "[::1]"
+  },
+  {
+    "decoder": "string_ip",
+    "input": "fe80::1%eth0"
+  },
+  {
+    "decoder": "enum",
+    "input": "Red"
+  },
+  {
+    "decoder": "string_trim",
+    "input": "﻿x᠎"
+  },
+  {
+    "decoder": "long",
+    "input_json": "123456789012345678901"
+  },
+  {
+    "decoder": "int",
+    "input_json": "3000000000"
   }
 ]

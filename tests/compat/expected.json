@@ -185,7 +185,13 @@
 }, {
   "decoder" : "string_ipv6",
   "input" : "[2001:db8::1]",
-  "ok" : "[2001:db8::1]"
+  "issues" : [ {
+    "code" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "message_key" : "invalid_format.ipv6",
+    "meta" : { },
+    "path" : ""
+  } ]
 }, {
   "decoder" : "string_ipv6",
   "input" : "2001:db8::g",
@@ -327,6 +333,7 @@
     "message" : "expected integer",
     "message_key" : "type_mismatch",
     "meta" : {
+      "actual" : "number",
       "expected" : "integer"
     },
     "path" : ""
@@ -1000,13 +1007,13 @@
     "message" : "is required",
     "message_key" : "required",
     "meta" : { },
-    "path" : "/a/b"
+    "path" : "/a~1b"
   }, {
     "code" : "required",
     "message" : "is required",
     "message_key" : "required",
     "meta" : { },
-    "path" : "/~c"
+    "path" : "/~0c"
   } ]
 }, {
   "decoder" : "optional",
@@ -1423,15 +1430,15 @@
 }, {
   "decoder" : "string_trim",
   "input" : "\u0000abc",
-  "ok" : "abc"
+  "ok" : "\u0000abc"
 }, {
   "decoder" : "string_trim",
   "input" : "　山田　",
-  "ok" : "　山田　"
+  "ok" : "山田"
 }, {
   "decoder" : "string_trim",
   "input" : " x ",
-  "ok" : " x "
+  "ok" : "x"
 }, {
   "decoder" : "string_trim",
   "input" : "\t x \n",
@@ -1439,15 +1446,21 @@
 }, {
   "decoder" : "string_trim",
   "input" : "x",
-  "ok" : "x"
+  "ok" : "x"
 }, {
   "decoder" : "string_trim",
   "input" : "\u001Fx\u001F",
-  "ok" : "x"
+  "ok" : "\u001Fx\u001F"
 }, {
   "decoder" : "string_non_blank",
   "input" : " ",
-  "ok" : " "
+  "issues" : [ {
+    "code" : "blank",
+    "message" : "must not be blank",
+    "message_key" : "blank",
+    "meta" : { },
+    "path" : ""
+  } ]
 }, {
   "decoder" : "string_non_blank",
   "input" : "　",
@@ -1461,10 +1474,6 @@
 }, {
   "decoder" : "string_non_blank",
   "input" : " ",
-  "ok" : " "
-}, {
-  "decoder" : "string_non_blank",
-  "input" : "\u001C",
   "issues" : [ {
     "code" : "blank",
     "message" : "must not be blank",
@@ -1474,8 +1483,18 @@
   } ]
 }, {
   "decoder" : "string_non_blank",
+  "input" : "\u001C",
+  "ok" : "\u001C"
+}, {
+  "decoder" : "string_non_blank",
   "input" : "",
-  "ok" : ""
+  "issues" : [ {
+    "code" : "blank",
+    "message" : "must not be blank",
+    "message_key" : "blank",
+    "meta" : { },
+    "path" : ""
+  } ]
 }, {
   "decoder" : "string_non_blank",
   "input" : "​",
@@ -1548,13 +1567,7 @@
 }, {
   "decoder" : "string_ipv6",
   "input" : "::ffff:1.2.3.4",
-  "issues" : [ {
-    "code" : "invalid_format",
-    "message" : "not a valid IPv6 address",
-    "message_key" : "invalid_format.ipv6",
-    "meta" : { },
-    "path" : ""
-  } ]
+  "ok" : "::ffff:1.2.3.4"
 }, {
   "decoder" : "string_ipv6",
   "input" : "fe80::1%1",
@@ -1580,13 +1593,7 @@
 }, {
   "decoder" : "string_ip",
   "input" : "::ffff:1.2.3.4",
-  "issues" : [ {
-    "code" : "invalid_format",
-    "message" : "not a valid IP address",
-    "message_key" : "invalid_format.ip",
-    "meta" : { },
-    "path" : ""
-  } ]
+  "ok" : "::ffff:1.2.3.4"
 }, {
   "decoder" : "string_email",
   "input" : "ä@b.co",
@@ -1628,17 +1635,17 @@
 }, {
   "decoder" : "string_uuid",
   "input" : "1-1-1-1-1",
-  "ok" : "00000001-0001-0001-0001-000000000001"
-}, {
-  "decoder" : "string_url",
-  "input" : "http://my_host.com",
   "issues" : [ {
     "code" : "invalid_format",
-    "message" : "not a valid URL",
-    "message_key" : "invalid_format.url",
+    "message" : "not a valid UUID",
+    "message_key" : "invalid_format.uuid",
     "meta" : { },
     "path" : ""
   } ]
+}, {
+  "decoder" : "string_url",
+  "input" : "http://my_host.com",
+  "ok" : "http://my_host.com"
 }, {
   "decoder" : "string_url",
   "input" : "https://example.com",
@@ -1696,10 +1703,9 @@
   "input_json" : "12345678901234567890",
   "issues" : [ {
     "code" : "type_mismatch",
-    "message" : "expected long",
-    "message_key" : "type_mismatch",
+    "message" : "value is outside the long range",
+    "message_key" : "type_mismatch.numeric_range",
     "meta" : {
-      "actual" : "number",
       "expected" : "long"
     },
     "path" : ""
@@ -1794,5 +1800,89 @@
       "expected" : "object"
     },
     "path" : "/kind"
+  } ]
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "::1%lo0",
+  "issues" : [ {
+    "code" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "message_key" : "invalid_format.ipv6",
+    "meta" : { },
+    "path" : ""
+  } ]
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "fe80::1%eth0",
+  "ok" : "fe80::1%eth0"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "ff0e::1%x",
+  "issues" : [ {
+    "code" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "message_key" : "invalid_format.ipv6",
+    "meta" : { },
+    "path" : ""
+  } ]
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "ff02::1%x",
+  "ok" : "ff02::1%x"
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "::00001",
+  "issues" : [ {
+    "code" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "message_key" : "invalid_format.ipv6",
+    "meta" : { },
+    "path" : ""
+  } ]
+}, {
+  "decoder" : "string_ipv6",
+  "input" : "[::1]",
+  "issues" : [ {
+    "code" : "invalid_format",
+    "message" : "not a valid IPv6 address",
+    "message_key" : "invalid_format.ipv6",
+    "meta" : { },
+    "path" : ""
+  } ]
+}, {
+  "decoder" : "string_ip",
+  "input" : "fe80::1%eth0",
+  "ok" : "fe80::1%eth0"
+}, {
+  "decoder" : "enum",
+  "input" : "Red",
+  "ok" : "red"
+}, {
+  "decoder" : "string_trim",
+  "input" : "﻿x᠎",
+  "ok" : "﻿x᠎"
+}, {
+  "decoder" : "long",
+  "input_json" : "123456789012345678901",
+  "issues" : [ {
+    "code" : "type_mismatch",
+    "message" : "value is outside the long range",
+    "message_key" : "type_mismatch.numeric_range",
+    "meta" : {
+      "expected" : "long"
+    },
+    "path" : ""
+  } ]
+}, {
+  "decoder" : "int",
+  "input_json" : "3000000000",
+  "issues" : [ {
+    "code" : "type_mismatch",
+    "message" : "value is outside the integer range",
+    "message_key" : "type_mismatch.numeric_range",
+    "meta" : {
+      "expected" : "integer"
+    },
+    "path" : ""
   } ]
 } ]

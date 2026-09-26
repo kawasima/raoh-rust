@@ -1,3 +1,4 @@
+use super::ip;
 use super::steps::Steps;
 use super::unexpected;
 use crate::decoder::Decoder;
@@ -10,9 +11,6 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 const MAX_EMAIL_LENGTH: usize = 254;
-const MAX_IP_LENGTH: usize = 45;
-#[cfg(feature = "url")]
-const MAX_URL_LENGTH: usize = 2048;
 
 /// A decoder of a JSON string.
 ///
@@ -96,30 +94,32 @@ impl StringDecoder {
         self
     }
 
-    /// Removes the characters up to U+0020 from both ends, as Java's `String.trim()` does: spaces,
-    /// tabs, line breaks and the other control characters. Other Unicode spaces, such as U+3000
-    /// and U+00A0, are kept.
+    /// Removes whitespace from both ends: the characters with Unicode's `White_Space` property,
+    /// which include U+3000 and U+00A0 and not control characters such as NUL. It is the set
+    /// [`non_blank`](Self::non_blank) uses, and the one Raoh for Java uses from 0.8 on.
     pub fn trim(self) -> Self {
-        self.transform(|s| java::trim(s).to_owned())
+        self.transform(|s| s.trim().to_owned())
     }
 
-    /// Converts to lower case with Unicode's case mapping, as Java's `toLowerCase` does under any
-    /// locale but Turkish, Azerbaijani and Lithuanian.
+    /// Converts to lower case with Unicode's case mapping, as Raoh for Java does with
+    /// `Locale.ROOT`.
     pub fn lowercase(self) -> Self {
         self.transform(str::to_lowercase)
     }
 
-    /// Converts to upper case with Unicode's case mapping, as Java's `toUpperCase` does under any
-    /// locale but Turkish, Azerbaijani and Lithuanian.
+    /// Converts to upper case with Unicode's case mapping, as Raoh for Java does with
+    /// `Locale.ROOT`.
     pub fn uppercase(self) -> Self {
         self.transform(str::to_uppercase)
     }
 
-    /// Requires a character that is not whitespace, as Java's `String.isBlank()` decides it:
-    /// `blank`. The non-breaking spaces U+00A0, U+2007 and U+202F are not whitespace there.
+    /// Requires a character that is not whitespace, in the sense [`trim`](Self::trim) uses:
+    /// `blank`. An empty string is blank.
     pub fn non_blank(mut self) -> Self {
-        self.steps
-            .require(|s| !java::is_blank(s), |_| Issue::new(codes::BLANK));
+        self.steps.require(
+            |s| !s.chars().all(char::is_whitespace),
+            |_| Issue::new(codes::BLANK),
+        );
         self
     }
 
@@ -230,27 +230,22 @@ impl StringDecoder {
 
     /// Requires an IPv4 address in dotted decimal: `invalid_format`.
     pub fn ipv4(self) -> Self {
-        self.format(
-            |s| java::utf16_len(s) <= MAX_IP_LENGTH && is_ipv4(s),
-            message_keys::INVALID_FORMAT_IPV4,
-        )
+        self.format(ip::is_ipv4, message_keys::INVALID_FORMAT_IPV4)
     }
 
-    /// Requires an IPv6 address as Java's `InetAddress` reads one: `invalid_format`. Brackets
-    /// and a numeric scope are allowed; an IPv4-mapped address and a scope naming an interface
-    /// are not.
+    /// Requires an IPv6 address in the RFC 4291 text form, as Raoh for Java checks it:
+    /// `invalid_format`. An embedded dotted quad (`::ffff:192.0.2.1`) is allowed and brackets
+    /// (`[::1]`) are not. A zone ID (`fe80::1%eth0`) is allowed on a link-local or non-global
+    /// multicast address and decided by its text alone, not by the host's interfaces.
     pub fn ipv6(self) -> Self {
-        self.format(
-            |s| java::utf16_len(s) <= MAX_IP_LENGTH && java::is_ipv6_literal(s),
-            message_keys::INVALID_FORMAT_IPV6,
-        )
+        self.format(ip::is_ipv6, message_keys::INVALID_FORMAT_IPV6)
     }
 
     /// Requires an address [`ipv4`](Self::ipv4) or [`ipv6`](Self::ipv6) accepts:
     /// `invalid_format`.
     pub fn ip(self) -> Self {
         self.format(
-            |s| java::utf16_len(s) <= MAX_IP_LENGTH && (is_ipv4(s) || java::is_ipv6_literal(s)),
+            |s| ip::is_ipv4(s) || ip::is_ipv6(s),
             message_keys::INVALID_FORMAT_IP,
         )
     }
@@ -457,9 +452,6 @@ impl Decoder<Value> for UrlDecoder {
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<url::Url, Issues> {
         let s = self.string.decode_at(input, path)?;
         let fail = || conversion_failed(path, message_keys::INVALID_FORMAT_URL, &self.message);
-        if java::utf16_len(&s) > MAX_URL_LENGTH {
-            return Err(fail());
-        }
         let url = url::Url::parse(&s).map_err(|_| fail())?;
         let web = matches!(url.scheme(), "http" | "https");
         let has_host = url.host_str().is_some_and(|h| !h.is_empty());
@@ -493,19 +485,6 @@ fn is_email(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'));
     let tld_ok = tld.len() >= 2 && tld.bytes().all(|b| b.is_ascii_alphabetic());
     local_ok && host_ok && tld_ok
-}
-
-/// Four decimal octets from 0 to 255, without leading zeros.
-fn is_ipv4(s: &str) -> bool {
-    let octets: Vec<&str> = s.split('.').collect();
-    octets.len() == 4
-        && octets.iter().all(|o| {
-            !o.is_empty()
-                && o.len() <= 3
-                && o.bytes().all(|b| b.is_ascii_digit())
-                && (o.len() == 1 || !o.starts_with('0'))
-                && o.parse::<u16>().is_ok_and(|n| n <= 255)
-        })
 }
 
 #[cfg(test)]
@@ -543,17 +522,21 @@ mod tests {
     }
 
     #[test]
-    fn trim_and_non_blank_follow_java() {
-        assert_eq!(
-            string().trim().decode(&json!("\u{3000}a\u{3000}")).unwrap(),
-            "\u{3000}a\u{3000}"
-        );
-        assert_eq!(string().trim().decode(&json!("\u{0}a\n")).unwrap(), "a");
-        assert!(string().non_blank().decode(&json!("\u{a0}")).is_ok());
-        assert_eq!(
-            first(string().non_blank().decode(&json!("\u{3000}"))).code(),
-            "blank"
-        );
+    fn trim_and_non_blank_share_unicode_white_space() {
+        let trim = |s: &str| string().trim().decode(&json!(s)).unwrap();
+        assert_eq!(trim("\u{3000}a\u{a0}"), "a");
+        assert_eq!(trim("\u{0}a\u{1f}"), "\u{0}a\u{1f}");
+        assert_eq!(trim("\u{85}a\u{2028}"), "a");
+        assert_eq!(trim("\u{feff}a\u{180e}"), "\u{feff}a\u{180e}");
+        for blank in ["", "\u{a0}", "\u{3000}", "\u{2007}"] {
+            assert_eq!(
+                first(string().non_blank().decode(&json!(blank))).code(),
+                "blank"
+            );
+        }
+        for not_blank in ["\u{1c}", "\u{0}", "\u{200b}"] {
+            assert!(string().non_blank().decode(&json!(not_blank)).is_ok());
+        }
     }
 
     #[test]
@@ -564,14 +547,6 @@ mod tests {
         for bad in ["a@b", "@b.co", "a@@b.co", "a@b.c", "a b@c.co", "a@b.c0"] {
             assert!(!is_email(bad), "{bad}");
         }
-    }
-
-    #[test]
-    fn ipv4_rejects_leading_zeros_and_large_octets() {
-        assert!(is_ipv4("192.168.0.1"));
-        assert!(!is_ipv4("192.168.00.1"));
-        assert!(!is_ipv4("256.0.0.1"));
-        assert!(!is_ipv4("1.2.3"));
     }
 
     #[test]

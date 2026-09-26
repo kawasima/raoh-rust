@@ -2,7 +2,8 @@
 
 use crate::issue::Issue;
 use crate::java;
-use serde_json::{Map, Value};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, LazyLock};
@@ -197,7 +198,7 @@ impl std::error::Error for PropertiesError {}
 
 /// `template` with each `{name}` replaced by the metadata entry `name`, or `None` when an entry is
 /// missing.
-fn fill(template: &str, meta: &Map<String, Value>) -> Option<String> {
+fn fill(template: &str, meta: &BTreeMap<String, Value>) -> Option<String> {
     let mut out = String::with_capacity(template.len());
     let mut rest = template;
     while let Some(open) = rest.find('{') {

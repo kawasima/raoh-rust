@@ -80,7 +80,7 @@ pub mod codes {
 /// template only for the code still resolves it. An issue whose message key is not one of these
 /// uses its code as its key.
 ///
-/// These are the keys of Raoh for Java, from 0.7.3 on, for the checks this crate shares with it.
+/// These are the keys of Raoh for Java 0.8, for the checks this crate shares with it.
 /// `invalid_format.json` is this crate's own, for text that is not JSON.
 pub mod message_keys {
     /// `out_of_range` from a lower bound.
@@ -97,6 +97,8 @@ pub mod message_keys {
     pub const OUT_OF_RANGE_NON_NEGATIVE: &str = "out_of_range.non_negative";
     /// `out_of_range` from `non_positive()`.
     pub const OUT_OF_RANGE_NON_POSITIVE: &str = "out_of_range.non_positive";
+    /// `type_mismatch` for an integer the type cannot hold.
+    pub const TYPE_MISMATCH_NUMERIC_RANGE: &str = "type_mismatch.numeric_range";
     /// `too_small` from `non_empty()`.
     pub const TOO_SMALL_NONEMPTY: &str = "too_small.nonempty";
     /// `invalid_format` from `email()`.
@@ -137,6 +139,7 @@ pub mod message_keys {
         OUT_OF_RANGE_NEGATIVE,
         OUT_OF_RANGE_NON_NEGATIVE,
         OUT_OF_RANGE_NON_POSITIVE,
+        TYPE_MISMATCH_NUMERIC_RANGE,
         TOO_SMALL_NONEMPTY,
         INVALID_FORMAT_EMAIL,
         INVALID_FORMAT_URL,

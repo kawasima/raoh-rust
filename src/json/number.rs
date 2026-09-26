@@ -20,18 +20,11 @@ mod sealed {
 pub trait Integer: sealed::Sealed + Copy + Ord + Into<Value> + Send + Sync + 'static {
     /// What an issue names the type in `expected`, as Raoh for Java does.
     const EXPECTED: &'static str;
-    /// Whether a number that is not an integer of this type is reported with `actual`, as Raoh
-    /// for Java's `long_()` does and its `int_()` does not.
-    const NUMBER_HAS_ACTUAL: bool;
     /// The smallest positive value.
     const ONE: Self;
 
-    /// The value of `n`, if it is an integer this type holds.
-    ///
-    /// `serde_json` reads the text `-0` as the float `-0.0`; it is read here as the integer 0, as
-    /// Jackson reads it. The text `-0.0` gives the same float and is read as 0 too, where Raoh for
-    /// Java rejects it.
-    fn from_number(n: &serde_json::Number) -> Option<Self>;
+    /// `value` as this type, if it holds it.
+    fn from_integer(value: i128) -> Option<Self>;
 
     /// Whether `self` is a multiple of `divisor`, which is not zero.
     fn is_multiple_of(self, divisor: Self) -> bool;
@@ -48,22 +41,31 @@ pub trait SignedInteger: Integer {
     const MINUS_ONE: Self;
 }
 
-fn is_negative_zero(n: &serde_json::Number) -> bool {
-    n.as_f64()
-        .is_some_and(|f| n.is_f64() && f == 0.0 && f.is_sign_negative())
+/// The integer a JSON number is, or `None` when it is not one: when it has a fraction or an
+/// exponent, or is too large for `serde_json` to keep as an integer.
+///
+/// `serde_json` reads the text `-0` as the float `-0.0`; it is read here as the integer 0, as
+/// Jackson reads it. The text `-0.0` gives the same float and is read as 0 too, where Raoh for
+/// Java rejects it.
+fn integral(n: &serde_json::Number) -> Option<i128> {
+    n.as_i64()
+        .map(i128::from)
+        .or_else(|| n.as_u64().map(i128::from))
+        .or_else(|| {
+            n.as_f64()
+                .filter(|f| n.is_f64() && *f == 0.0 && f.is_sign_negative())
+                .map(|_| 0)
+        })
 }
 
 macro_rules! integer {
-    ($t:ty, $expected:literal, $actual:literal, $via:ident) => {
+    ($t:ty, $expected:literal) => {
         impl Integer for $t {
             const EXPECTED: &'static str = $expected;
-            const NUMBER_HAS_ACTUAL: bool = $actual;
             const ONE: Self = 1;
 
-            fn from_number(n: &serde_json::Number) -> Option<Self> {
-                n.$via()
-                    .or_else(|| is_negative_zero(n).then_some(0))
-                    .and_then(|v| <$t>::try_from(v).ok())
+            fn from_integer(value: i128) -> Option<Self> {
+                <$t>::try_from(value).ok()
             }
 
             fn is_multiple_of(self, divisor: Self) -> bool {
@@ -77,10 +79,10 @@ macro_rules! integer {
     };
 }
 
-integer!(i32, "integer", false, as_i64);
-integer!(i64, "long", true, as_i64);
-integer!(u32, "integer", false, as_u64);
-integer!(u64, "long", true, as_u64);
+integer!(i32, "integer");
+integer!(i64, "long");
+integer!(u32, "integer");
+integer!(u64, "long");
 
 impl SignedInteger for i32 {
     const ZERO: Self = 0;
@@ -94,11 +96,11 @@ impl SignedInteger for i64 {
 
 /// A decoder of a JSON integer into `T`.
 ///
-/// Missing or `null` is `required`. A value of another type, a number with a fraction or an
-/// exponent, and an integer `T` cannot hold are `type_mismatch`. The type found is named in
-/// `actual` for a value of another type, and for a number too when `T` is `i64` or `u64`, as
-/// Raoh for Java does for `int_()` and `long_()`. Constraints run in the order they are written,
-/// and the first to fail is the one reported.
+/// Missing or `null` is `required`. A value of another type, and a number with a fraction or an
+/// exponent, is `type_mismatch` with the type found as `actual` (`number` for such a number). An
+/// integer `T` cannot hold is `type_mismatch` under the message key
+/// `type_mismatch.numeric_range`, with `expected` alone, as Raoh for Java reports it.
+/// Constraints run in the order they are written, and the first to fail is the one reported.
 #[derive(Clone, Debug)]
 pub struct IntDecoder<T> {
     steps: Steps<T>,
@@ -141,14 +143,13 @@ impl<T: Integer> Decoder<Value> for IntDecoder<T> {
 
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
         let found = match input {
-            Value::Number(n) => T::from_number(n).ok_or_else(|| {
-                let issue = type_mismatch(path, T::EXPECTED);
-                if T::NUMBER_HAS_ACTUAL {
-                    issue.with_meta("actual", "number")
-                } else {
-                    issue
-                }
-            }),
+            Value::Number(n) => match integral(n) {
+                Some(value) => T::from_integer(value).ok_or_else(|| {
+                    type_mismatch(path, T::EXPECTED)
+                        .with_message_key(message_keys::TYPE_MISMATCH_NUMERIC_RANGE)
+                }),
+                None => Err(type_mismatch(path, T::EXPECTED).with_meta("actual", "number")),
+            },
             Value::Null => Err(required(path)),
             other => Err(type_mismatch(path, T::EXPECTED).with_meta("actual", node_type(other))),
         };
@@ -457,27 +458,35 @@ mod tests {
     }
 
     #[test]
-    fn a_fraction_names_actual_only_for_64_bit_types() {
-        let issue = first(i32().decode(&json!(1.5)));
-        assert_eq!(issue.meta()["expected"], "integer");
-        assert!(!issue.meta().contains_key("actual"));
-        let issue = first(i64().decode(&json!(1.5)));
-        assert_eq!(issue.meta()["expected"], "long");
-        assert_eq!(issue.meta()["actual"], "number");
+    fn a_number_that_is_not_an_integer_names_what_it_is() {
+        for issue in [
+            first(i32().decode(&json!(1.5))),
+            first(u64().decode(&json!(1e2))),
+        ] {
+            assert_eq!(issue.message_key(), "type_mismatch");
+            assert_eq!(issue.meta()["actual"], "number");
+        }
     }
 
     #[test]
-    fn an_integer_too_large_for_the_type_is_a_type_mismatch() {
-        assert_eq!(
-            first(i32().decode(&json!(3_000_000_000_i64))).code(),
-            "type_mismatch"
-        );
-        assert_eq!(
-            first(i64().decode(&json!(u64::MAX))).code(),
-            "type_mismatch"
-        );
-        assert_eq!(first(u32().decode(&json!(-1))).code(), "type_mismatch");
+    fn an_integer_the_type_cannot_hold_is_outside_its_range() {
+        for (issue, expected) in [
+            (first(i32().decode(&json!(3_000_000_000_i64))), "integer"),
+            (first(i64().decode(&json!(u64::MAX))), "long"),
+            (first(u32().decode(&json!(-1))), "integer"),
+            (first(u64().decode(&json!(i64::MIN))), "long"),
+        ] {
+            assert_eq!(issue.code(), "type_mismatch");
+            assert_eq!(issue.message_key(), "type_mismatch.numeric_range");
+            assert_eq!(issue.meta().len(), 1);
+            assert_eq!(issue.meta()["expected"], expected);
+            assert_eq!(
+                issue.message(),
+                format!("value is outside the {expected} range")
+            );
+        }
         assert_eq!(u64().decode(&json!(u64::MAX)).unwrap(), u64::MAX);
+        assert_eq!(i64().decode(&json!(i64::MIN)).unwrap(), i64::MIN);
     }
 
     #[test]

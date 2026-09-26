@@ -253,16 +253,17 @@ fn divergences() -> Vec<(&'static str, Value, Value, &'static str)> {
             object_scope,
         ),
         (
-            "escaped_keys",
-            json!({}),
-            json!({ "issues": [
-                {"path": "/a~1b", "code": "required", "message_key": "required",
-                 "message": "is required", "meta": {}},
-                {"path": "/~0c", "code": "required", "message_key": "required",
-                 "message": "is required", "meta": {}},
-            ]}),
-            "paths are RFC 6901 JSON Pointers, as in the Souther runtime; Java does not escape / \
-             and ~ in a key",
+            "long",
+            json!("123456789012345678901"),
+            failure(
+                "",
+                "type_mismatch",
+                "type_mismatch",
+                "expected long",
+                json!({"expected": "long", "actual": "number"}),
+            ),
+            "serde_json keeps an integer beyond u64 as a float, like 1e20, so it cannot be told \
+             apart from a number with an exponent; Jackson keeps it as a BigInteger",
         ),
         (
             "long",
@@ -287,8 +288,8 @@ fn divergences() -> Vec<(&'static str, Value, Value, &'static str)> {
         ));
     }
     if cfg!(feature = "uuid") {
-        let uuid_crate = "uuid() parses with the uuid crate, which accepts the forms without \
-                          hyphens and in braces and not Java's short groups";
+        let uuid_crate = "uuid() parses with the uuid crate, which also accepts the forms \
+                          without hyphens and in braces";
         let uuid = json!({"ok": "123e4567-e89b-12d3-a456-426614174000"});
         list.push((
             "string_uuid",
@@ -300,18 +301,6 @@ fn divergences() -> Vec<(&'static str, Value, Value, &'static str)> {
             "string_uuid",
             json!("{123e4567-e89b-12d3-a456-426614174000}"),
             uuid,
-            uuid_crate,
-        ));
-        list.push((
-            "string_uuid",
-            json!("1-1-1-1-1"),
-            failure(
-                "",
-                "invalid_format",
-                "invalid_format.uuid",
-                "not a valid UUID",
-                json!({}),
-            ),
             uuid_crate,
         ));
     }
@@ -359,6 +348,9 @@ fn every_case_gives_what_raoh_for_java_gives() {
     let mut mismatches = Vec::new();
     let mut skipped = Vec::new();
     let mut diverged = 0;
+    // A divergence Raoh for Java has caught up with is removed, not kept as a record of a
+    // difference that no longer exists.
+    let mut stale = Vec::new();
     for case in &expected {
         let name = case["decoder"].as_str().unwrap();
         // A number whose text matters, such as -0, is given as the JSON text to read.
@@ -380,6 +372,9 @@ fn every_case_gives_what_raoh_for_java_gives() {
         {
             Some((_, _, ours, _)) => {
                 diverged += 1;
+                if *ours == java {
+                    stale.push(format!("{name} {key}"));
+                }
                 ours.clone()
             }
             None => java,
@@ -398,6 +393,10 @@ fn every_case_gives_what_raoh_for_java_gives() {
         assert!(skipped.is_empty(), "no Rust decoder for {skipped:?}");
         assert_eq!(diverged, divergences.len(), "a divergence names no case");
     }
+    assert!(
+        stale.is_empty(),
+        "these divergences now give what Raoh for Java gives; remove them: {stale:?}"
+    );
     assert!(
         mismatches.is_empty(),
         "{} of {} cases differ:\n{}",

@@ -7,10 +7,11 @@ use crate::{codes, message_keys};
 use serde_json::Value;
 use std::borrow::Cow;
 
-/// A decoder of a JSON string naming one of `variants`, matched without regard to case.
+/// A decoder of a JSON string naming one of `variants`, matched without regard to ASCII case.
 ///
-/// A string naming none is `invalid_format` with the names, lower-cased and sorted by code point,
-/// as `allowed`.
+/// Only `A`–`Z` and `a`–`z` are folded, as Raoh for Java folds them: `"RED"` matches `red`, and
+/// a non-ASCII letter matches only itself. A string naming none is `invalid_format` with the
+/// names, ASCII lower-cased and sorted by code point, as `allowed`.
 ///
 /// ```
 /// use raoh::json::prelude::*;
@@ -22,11 +23,20 @@ use std::borrow::Cow;
 /// assert_eq!(color.decode(&json!("RED")).unwrap(), Color::Red);
 /// assert!(color.decode(&json!("blue")).is_err());
 /// ```
+///
+/// # Panics
+///
+/// When two names are equal under ASCII case folding, such as `a` and `A`.
 pub fn enum_of<'a, T: Clone>(variants: impl IntoIterator<Item = (&'a str, T)>) -> EnumOf<T> {
     let variants: Vec<(String, T)> = variants
         .into_iter()
-        .map(|(name, value)| (name.to_lowercase(), value))
+        .map(|(name, value)| (name.to_ascii_lowercase(), value))
         .collect();
+    for (i, (name, _)) in variants.iter().enumerate() {
+        if variants[..i].iter().any(|(earlier, _)| earlier == name) {
+            panic!("enum names equal to '{name}' under ASCII case folding appear twice");
+        }
+    }
     let mut allowed: Vec<String> = variants.iter().map(|(name, _)| name.clone()).collect();
     allowed.sort();
     allowed.dedup();
@@ -44,7 +54,7 @@ impl<T: Clone> Decoder<Value> for EnumOf<T> {
     type Output = T;
 
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
-        let name = string().decode_at(input, path)?.to_lowercase();
+        let name = string().decode_at(input, path)?.to_ascii_lowercase();
         self.variants
             .iter()
             .find(|(candidate, _)| *candidate == name)
@@ -299,6 +309,29 @@ mod tests {
     #[should_panic(expected = "duplicate variant tag 'a'")]
     fn duplicate_tags_panic() {
         discriminate("t", (variant("a", i64()), variant("a", i64())));
+    }
+
+    #[test]
+    fn enum_names_fold_ascii_case_only() {
+        let decoder = enum_of([("red", 1), ("straße", 2), ("K", 3)]);
+        assert_eq!(decoder.decode(&json!("RED")).unwrap(), 1);
+        assert!(decoder.decode(&json!("STRASSE")).is_err());
+        assert_eq!(decoder.decode(&json!("Straße")).unwrap(), 2);
+        // U+212A KELVIN SIGN lower-cases to 'k' in Unicode, but is not ASCII.
+        assert!(decoder.decode(&json!("\u{212a}")).is_err());
+        let issue = decoder
+            .decode(&json!("blue"))
+            .unwrap_err()
+            .into_iter()
+            .next()
+            .unwrap();
+        assert_eq!(issue.meta()["allowed"], json!(["k", "red", "straße"]));
+    }
+
+    #[test]
+    #[should_panic(expected = "under ASCII case folding appear twice")]
+    fn enum_names_equal_under_folding_panic() {
+        enum_of([("a", 1), ("A", 2)]);
     }
 
     #[test]

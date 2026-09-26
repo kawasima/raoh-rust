@@ -1,41 +1,15 @@
 //! What the operations Raoh for Java takes from the JDK mean, written once.
 //!
 //! Where a built-in decoder does what Raoh for Java does with a JDK method, it calls the function
-//! here rather than the Rust method with the same name: `str::trim`, `char::is_whitespace`,
-//! `f64`'s `Display` and `std::net::Ipv6Addr` each differ from their JDK counterparts on some
-//! input. Each function names the JDK method it follows, and the tests pin the inputs on
-//! which the two differ.
+//! here rather than the Rust function that looks like it: `str::len` counts UTF-8 bytes where
+//! `String.length()` counts UTF-16 units, `f64`'s `Display` writes `10000000.0` where
+//! `Double.toString` writes `1.0E7`, and no Rust crate reads a `.properties` file as
+//! `Properties.load` does. Each function names the JDK method it follows, and the tests pin the
+//! inputs on which the two differ.
 //!
-//! Operations whose output is a Rust type parsed by a Rust crate (`uuid()`, `url()`, `pattern()`)
-//! are not here: they follow that crate, and the README lists where that differs from Java.
-//!
-//! Strings are sorted by code point, as `str` sorts them. Raoh for Java sorts them the same way
-//! through its `CodePointOrder`, rather than by UTF-16 code unit as `String.compareTo` does.
-
-/// `String.trim()`: removes every code point up to U+0020 from both ends, and nothing else.
-pub(crate) fn trim(s: &str) -> &str {
-    s.trim_matches(|c: char| c <= ' ')
-}
-
-/// `Character.isWhitespace(int)`: the Unicode space, line and paragraph separators other than the
-/// non-breaking ones (U+00A0, U+2007, U+202F), and the controls U+0009–U+000D and U+001C–U+001F.
-pub(crate) fn is_whitespace(c: char) -> bool {
-    matches!(c,
-        '\u{0009}'..='\u{000D}'
-        | '\u{001C}'..='\u{0020}'
-        | '\u{1680}'
-        | '\u{2000}'..='\u{2006}'
-        | '\u{2008}'..='\u{200A}'
-        | '\u{2028}'
-        | '\u{2029}'
-        | '\u{205F}'
-        | '\u{3000}')
-}
-
-/// `String.isBlank()`: empty, or whitespace as [`is_whitespace`] says throughout.
-pub(crate) fn is_blank(s: &str) -> bool {
-    s.chars().all(is_whitespace)
-}
+//! Rules Raoh for Java defines itself rather than taking from the JDK are not here: whitespace is
+//! Unicode's `White_Space`, which `str::trim` already follows; the IP grammar is in `json::ip`;
+//! strings sort by code point, as `str` does.
 
 /// `String.length()`: the number of UTF-16 code units.
 pub(crate) fn utf16_len(s: &str) -> usize {
@@ -83,34 +57,6 @@ pub(crate) fn double_to_string(v: f64) -> String {
         format!("{first}.{rest}E{exponent}")
     };
     format!("{sign}{body}")
-}
-
-/// Whether `s` is an IPv6 literal `InetAddress.getByName` reads as an `Inet6Address`.
-///
-/// The literal may be in brackets and may end in a numeric scope (`%3`). A scope naming an
-/// interface is refused: the JDK accepts it only when the machine running it has that interface,
-/// so no answer is the same everywhere. An IPv4-mapped address (`::ffff:a.b.c.d`) is refused, as
-/// the JDK reads it as an `Inet4Address`.
-pub(crate) fn is_ipv6_literal(s: &str) -> bool {
-    let bare = s
-        .strip_prefix('[')
-        .and_then(|rest| rest.strip_suffix(']'))
-        .unwrap_or(s);
-    if !bare.contains(':') {
-        return false;
-    }
-    let address = match bare.split_once('%') {
-        Some((address, scope)) => {
-            if scope.is_empty() || !scope.bytes().all(|b| b.is_ascii_digit()) {
-                return false;
-            }
-            address
-        }
-        None => bare,
-    };
-    address
-        .parse::<std::net::Ipv6Addr>()
-        .is_ok_and(|a| a.to_ipv4_mapped().is_none())
 }
 
 /// Where [`load_properties`] stopped reading.
@@ -226,30 +172,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn trim_removes_controls_and_keeps_wide_spaces() {
-        assert_eq!(trim("\u{0}\t abc \n"), "abc");
-        assert_eq!(trim("\u{3000}山田\u{3000}"), "\u{3000}山田\u{3000}");
-        assert_eq!(trim("\u{a0}x\u{a0}"), "\u{a0}x\u{a0}");
-    }
-
-    #[test]
-    fn whitespace_follows_character_is_whitespace() {
-        for c in [
-            '\t', '\n', '\u{1c}', ' ', '\u{1680}', '\u{2003}', '\u{2028}', '\u{3000}',
-        ] {
-            assert!(is_whitespace(c), "{:?}", c);
-        }
-        for c in [
-            '\u{a0}', '\u{2007}', '\u{202f}', '\u{85}', '\u{0}', 'a', '\u{200b}',
-        ] {
-            assert!(!is_whitespace(c), "{:?}", c);
-        }
-        assert!(is_blank(""));
-        assert!(is_blank(" \u{3000}"));
-        assert!(!is_blank("\u{a0}"));
-    }
-
-    #[test]
     fn doubles_are_written_as_java_writes_them() {
         let cases = [
             (0.0, "0.0"),
@@ -270,23 +192,6 @@ mod tests {
         ];
         for (v, java) in cases {
             assert_eq!(double_to_string(v), java, "{v:e}");
-        }
-    }
-
-    #[test]
-    fn ipv6_follows_inet_address() {
-        for ok in ["::1", "[2001:db8::1]", "fe80::1%3", "::1.2.3.4"] {
-            assert!(is_ipv6_literal(ok), "{ok}");
-        }
-        for bad in [
-            "1.2.3.4",
-            "::ffff:1.2.3.4",
-            "fe80::1%eth0",
-            "fe80::1%",
-            "2001:db8::g",
-            "[::1",
-        ] {
-            assert!(!is_ipv6_literal(bad), "{bad}");
         }
     }
 

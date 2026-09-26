@@ -132,7 +132,7 @@ let custom = Issue::new("checksum").with_message("the check digit does not match
 assert_eq!(custom.message_with(Messages::japanese()), "the check digit does not match");
 ```
 
-The codes, message keys and meta keys are the same as in Raoh for Java from 0.7.3 on, and the
+The codes, message keys and meta keys are the same as in Raoh for Java from 0.8 on, and the
 codes and meta keys the same as in raoh-php, so the same client-side
 handling works for all of them, and a catalogue written for Raoh for Java resolves these issues
 too. `tests/compat` runs the same inputs through Raoh for Java and checks this crate gives the same
@@ -232,11 +232,13 @@ it a custom message. Transformations such as `trim` cannot fail and are passed o
 `string().trim().message("...")` gives the message to the type check, and
 `string().min_length(3).trim().message("...")` gives it to `min_length`.
 
-Whitespace, character counts, string order and number formatting follow Raoh for Java: `trim`
-removes the characters up to U+0020 as `String.trim()` does and keeps U+3000, `non_blank` decides
-whitespace as `Character.isWhitespace` does, lengths count code points, `one_of` and
-`discriminate` sort by code point as Raoh for Java's `CodePointOrder` does, and a fractional bound
-appears in a message as `Double.toString` writes it, such as `1.0E7`.
+Whitespace, character counts, string order, case folding and number formatting follow Raoh for
+Java 0.8: `trim` and `non_blank` use Unicode's `White_Space` (so U+3000 and U+00A0 are whitespace
+and control characters are not), lengths count code points, `one_of`, `discriminate` and
+`enum_of` sort by code point, `enum_of` folds ASCII case only, and a fractional bound appears in
+a message as `Double.toString` writes it, such as `1.0E7`. `ipv6` accepts the RFC 4291 text form
+without brackets, and a zone ID only on a link-local or non-global multicast address, decided by
+the text alone. An issue's `meta` iterates in key order.
 
 ## Objects, lists and maps
 
@@ -245,7 +247,8 @@ appears in a message as `Double.toString` writes it, such as `1.0E7`.
 - `presence_field(name, d)`: `Presence<T>`, one of `Absent`, `Null` or `Present(T)`
 - `d.nullable()`: `Option<T>`, `None` when the value is `null`
 - `d.list()`: `Vec<T>`, with `non_empty`, `min_size`, `max_size`, `size` and `unique`
-- `dict(d)`: `HashMap<String, T>` from an object used as a map
+- `dict(d)`: an `IndexMap<String, T>` from an object used as a map, in the order the `Value`
+  keeps its keys
 
 `object` requires its input to be an object. Anything else is one issue at the object's own path:
 `required` for missing or `null`, `type_mismatch` otherwise. A field is not a decoder on its own,
@@ -271,7 +274,7 @@ assert_eq!(
 
 ## Choices
 
-- `enum_of([("red", Color::Red), ...])`: a string naming one of the values, case-insensitively
+- `enum_of([("red", Color::Red), ...])`: a string naming one of the values, ignoring ASCII case
 - `literal("v1")`: exactly that string
 - `one_of((a, b, ...))`: the first alternative that decodes, or `one_of_failed` with each
   alternative's issues in `meta.candidates`
@@ -367,15 +370,16 @@ In what it reports:
 - `object` checks once that its input is an object and reports one issue at its own path when it
   is not. Raoh for Java checks in each field, reporting `type_mismatch` at every field's path and
   reading a non-object as an object without any `optional_field`.
-- JSON Pointers are escaped as RFC 6901 says, as the Souther runtime does: a key `a/b` is written
-  `/a~1b`. Raoh for Java 0.7.2 writes `/a/b`.
-- `uuid()` parses with the `uuid` crate, which accepts 32 digits without hyphens and the form in
-  braces, and refuses Java's short groups such as `1-1-1-1-1`.
+- `uuid()` parses with the `uuid` crate, which also accepts 32 digits without hyphens and the
+  form in braces.
 - `url()` parses with the `url` crate, which follows the WHATWG URL Standard: it accepts `_` and
   non-ASCII characters in a host, refuses a port above 65535, and normalises the URL, so
   `https://example.com` becomes `https://example.com/`.
 - `pattern()` takes the syntax of the `regex` crate, where `\d`, `\w` and `\s` match Unicode
   characters and Java's match ASCII only.
+- `serde_json` keeps an integer beyond the `u64` range as a float, as it keeps `1e20`, so the
+  integer decoders report it as a number that is not an integer (`type_mismatch` with `actual`),
+  where Raoh for Java reports it as outside the range (`type_mismatch.numeric_range`).
 - `serde_json` reads `-0.0` as the same float as `-0`, so the integer decoders read both as 0.
   Raoh for Java refuses `-0.0`.
 - A fractional decimal bound outside 0.001 to 10⁷ appears in a message in exponent form, such as
