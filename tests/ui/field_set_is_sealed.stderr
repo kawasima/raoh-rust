@@ -1,0 +1,37 @@
+error[E0277]: the trait bound `Anything: json::object::sealed::Sealed` is not satisfied
+ --> tests/ui/field_set_is_sealed.rs:8:19
+  |
+8 | impl FieldSet for Anything {
+  |                   ^^^^^^^^ unsatisfied trait bound
+  |
+help: the trait `json::object::sealed::Sealed` is not implemented for `Anything`
+ --> tests/ui/field_set_is_sealed.rs:6:1
+  |
+6 | struct Anything;
+  | ^^^^^^^^^^^^^^^
+  = help: the following other types implement trait `json::object::sealed::Sealed`:
+            (A, B)
+            (A, B, C)
+            (A, B, C, D)
+            (A, B, C, D, E)
+            (A, B, C, D, E, F)
+            (A, B, C, D, E, F, G)
+            (A, B, C, D, E, F, G, H)
+            (A, B, C, D, E, F, G, H, J)
+          and $N others
+note: required by a bound in `FieldSet`
+ --> src/json/object.rs
+  |
+  | pub trait FieldSet: sealed::Sealed {
+  |                     ^^^^^^^^^^^^^^ required by this bound in `FieldSet`
+  = note: `FieldSet` is a "sealed trait", because to implement it you also need to implement `raoh::json::object::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+  = help: the following types implement the trait:
+            raoh::json::Field<D>
+            raoh::json::OptionalField<D>
+            raoh::json::PresenceField<D>
+            (A,)
+            (A, B)
+            (A, B, C)
+            (A, B, C, D)
+            (A, B, C, D, E)
+          and $N others

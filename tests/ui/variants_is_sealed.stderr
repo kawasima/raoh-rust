@@ -1,0 +1,37 @@
+error[E0277]: the trait bound `Anything: json::choice::sealed::Sealed` is not satisfied
+ --> tests/ui/variants_is_sealed.rs:7:19
+  |
+7 | impl Variants for Anything {
+  |                   ^^^^^^^^ unsatisfied trait bound
+  |
+help: the trait `json::choice::sealed::Sealed` is not implemented for `Anything`
+ --> tests/ui/variants_is_sealed.rs:5:1
+  |
+5 | struct Anything;
+  | ^^^^^^^^^^^^^^^
+  = help: the following other types implement trait `json::choice::sealed::Sealed`:
+            (Variant<A>, Variant<B>)
+            (Variant<A>, Variant<B>, Variant<C>)
+            (Variant<A>, Variant<B>, Variant<C>, Variant<D>)
+            (Variant<A>, Variant<B>, Variant<C>, Variant<D>, Variant<E>)
+            (Variant<A>, Variant<B>, Variant<C>, Variant<D>, Variant<E>, Variant<F>)
+            (Variant<A>, Variant<B>, Variant<C>, Variant<D>, Variant<E>, Variant<F>, Variant<G>)
+            (Variant<A>, Variant<B>, Variant<C>, Variant<D>, Variant<E>, Variant<F>, Variant<G>, Variant<H>)
+            (Variant<A>, Variant<B>, Variant<C>, Variant<D>, Variant<E>, Variant<F>, Variant<G>, Variant<H>, Variant<J>)
+          and $N others
+note: required by a bound in `Variants`
+ --> src/json/choice.rs
+  |
+  | pub trait Variants: sealed::Sealed {
+  |                     ^^^^^^^^^^^^^^ required by this bound in `Variants`
+  = note: `Variants` is a "sealed trait", because to implement it you also need to implement `raoh::json::choice::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
+  = help: the following types implement the trait:
+            (raoh::json::Variant<A>,)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>, raoh::json::Variant<C>)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>, raoh::json::Variant<C>, raoh::json::Variant<D>)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>, raoh::json::Variant<C>, raoh::json::Variant<D>, raoh::json::Variant<E>)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>, raoh::json::Variant<C>, raoh::json::Variant<D>, raoh::json::Variant<E>, raoh::json::Variant<F>)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>, raoh::json::Variant<C>, raoh::json::Variant<D>, raoh::json::Variant<E>, raoh::json::Variant<F>, raoh::json::Variant<G>)
+            (raoh::json::Variant<A>, raoh::json::Variant<B>, raoh::json::Variant<C>, raoh::json::Variant<D>, raoh::json::Variant<E>, raoh::json::Variant<F>, raoh::json::Variant<G>, raoh::json::Variant<H>)
+          and $N others

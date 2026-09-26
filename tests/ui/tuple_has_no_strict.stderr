@@ -1,0 +1,5 @@
+error[E0599]: no method named `strict` found for tuple `(raoh::json::Field<IntDecoder<i64>>, raoh::json::Field<IntDecoder<i64>>)` in the current scope
+ --> tests/ui/tuple_has_no_strict.rs:4:52
+  |
+4 |     let _ = (field("a", i64()), field("b", i64())).strict();
+  |                                                    ^^^^^^ method not found in `(raoh::json::Field<IntDecoder<i64>>, raoh::json::Field<IntDecoder<i64>>)`

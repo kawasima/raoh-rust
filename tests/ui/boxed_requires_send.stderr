@@ -1,0 +1,61 @@
+error[E0277]: `Rc<std::string::String>` cannot be sent between threads safely
+ --> tests/ui/boxed_requires_send.rs:6:59
+  |
+6 |     let _ = string().map(move |s| format!("{prefix}{s}")).boxed();
+  |                                                           ^^^^^ `Rc<std::string::String>` cannot be sent between threads safely
+  |
+  = help: within `raoh::combinator::Map<StringDecoder, {closure@$DIR/tests/ui/boxed_requires_send.rs:6:26: 6:34}>`, the trait `Send` is not implemented for `Rc<std::string::String>`
+note: required because it's used within this closure
+ --> tests/ui/boxed_requires_send.rs:6:26
+  |
+6 |     let _ = string().map(move |s| format!("{prefix}{s}")).boxed();
+  |                          ^^^^^^^^
+note: required because it appears within the type `raoh::combinator::Map<StringDecoder, {closure@$DIR/tests/ui/boxed_requires_send.rs:6:26: 6:34}>`
+ --> src/combinator/adapters.rs
+  |
+  | pub struct Map<D, F> {
+  |            ^^^
+note: required by a bound in `boxed`
+ --> src/decoder.rs
+  |
+  |     fn boxed(self) -> BoxDecoder<I, Self::Output>
+  |        ----- required by a bound in this associated function
+  |     where
+  |         Self: Sized + Send + Sync + 'static,
+  |                       ^^^^ required by this bound in `Decoder::boxed`
+help: consider removing this method call, as the receiver has type `StringDecoder` and `StringDecoder: Send` trivially holds
+  |
+6 -     let _ = string().map(move |s| format!("{prefix}{s}")).boxed();
+6 +     let _ = string().boxed();
+  |
+
+error[E0277]: `Rc<std::string::String>` cannot be shared between threads safely
+ --> tests/ui/boxed_requires_send.rs:6:59
+  |
+6 |     let _ = string().map(move |s| format!("{prefix}{s}")).boxed();
+  |                                                           ^^^^^ `Rc<std::string::String>` cannot be shared between threads safely
+  |
+  = help: within `raoh::combinator::Map<StringDecoder, {closure@$DIR/tests/ui/boxed_requires_send.rs:6:26: 6:34}>`, the trait `Sync` is not implemented for `Rc<std::string::String>`
+note: required because it's used within this closure
+ --> tests/ui/boxed_requires_send.rs:6:26
+  |
+6 |     let _ = string().map(move |s| format!("{prefix}{s}")).boxed();
+  |                          ^^^^^^^^
+note: required because it appears within the type `raoh::combinator::Map<StringDecoder, {closure@$DIR/tests/ui/boxed_requires_send.rs:6:26: 6:34}>`
+ --> src/combinator/adapters.rs
+  |
+  | pub struct Map<D, F> {
+  |            ^^^
+note: required by a bound in `boxed`
+ --> src/decoder.rs
+  |
+  |     fn boxed(self) -> BoxDecoder<I, Self::Output>
+  |        ----- required by a bound in this associated function
+  |     where
+  |         Self: Sized + Send + Sync + 'static,
+  |                              ^^^^ required by this bound in `Decoder::boxed`
+help: consider removing this method call, as the receiver has type `StringDecoder` and `StringDecoder: Sync` trivially holds
+  |
+6 -     let _ = string().map(move |s| format!("{prefix}{s}")).boxed();
+6 +     let _ = string().boxed();
+  |

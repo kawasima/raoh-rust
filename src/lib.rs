@@ -1,14 +1,61 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Raoh turns untyped boundary input into typed domain values.
+//!
+//! It follows parse, don't validate: a domain value is built only once everything it is built
+//! from has been read, so a value that exists is a valid one. What was wrong with the input comes
+//! back as [`Issues`], every one of them with the [JSON Pointer](Pointer) of where it was found,
+//! rather than the first.
+//!
+//! Serde reads JSON text into a [`serde_json::Value`]; Raoh reads that value into the domain.
+//!
+//! ```
+//! use raoh::json::prelude::*;
+//!
+//! #[derive(Debug)]
+//! struct Email(String);
+//! #[derive(Debug)]
+//! struct User { email: Email, age: u32 }
+//!
+//! fn email() -> impl Decoder<Value, Output = Email> {
+//!     string().trim().lowercase().email().map(Email)
+//! }
+//!
+//! fn user() -> impl Decoder<Value, Output = User> {
+//!     object((
+//!         field("email", email()),
+//!         field("age", u32().range(0..=150)),
+//!     ))
+//!     .map(|(email, age)| User { email, age })
+//! }
+//!
+//! let issues = user().decode(&json!({"email": "nope", "age": 200})).unwrap_err();
+//! let paths: Vec<String> = issues.iter().map(|i| i.path().to_string()).collect();
+//! assert_eq!(paths, ["/email", "/age"]);
+//! ```
+//!
+//! Independent parts are combined with a tuple, which reports the issues of every part;
+//! [`Decoder::and_then`] checks what depends on several parts together, once they have all been
+//! read.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#![warn(missing_docs)]
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod combinator;
+mod decoder;
+mod issue;
+mod java;
+pub mod json;
+mod message;
+mod path;
+mod presence;
+mod vocabulary;
+
+pub use combinator::{lazy, one_of};
+pub use decoder::{BoxDecoder, Decoder, FnDecoder, decoder_fn};
+pub use issue::{Issue, Issues};
+pub use message::{MessageResolver, Messages, PropertiesError};
+pub use path::{Path, Pointer, Segment};
+pub use presence::Presence;
+
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+struct ReadmeDoctests;
+pub use vocabulary::{codes, message_keys};

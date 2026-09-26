@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned because trybuild compares against the compiler's exact output, which changes
+      # between releases. Regenerate tests/ui/*.stderr with TRYBUILD=overwrite when moving it.
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-features --all-targets -- -D warnings
+      - run: cargo test --all-features
+      - run: cargo test
+      - run: cargo doc --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.87
+      # Resolve afresh, as a user of the crate does, so what is tested is what they get: the
+      # MSRV-aware resolver picks versions compatible with rust-version where it can.
+      - run: cargo generate-lockfile
+      # trybuild's expected compiler output is that of the job above, so it runs only there.
+      - run: cargo test --all-features --lib --test compat --test combinators
+      - run: cargo test --all-features --doc
