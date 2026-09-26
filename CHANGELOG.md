@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 - 2026-09-27
 
 First release: a Rust port of Raoh for decoding `serde_json::Value`.
 
