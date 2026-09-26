@@ -5,7 +5,7 @@ use crate::java;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 /// Writes the sentence for an issue that has no custom message.
 ///
@@ -22,12 +22,17 @@ impl<F: Fn(&Issue) -> String> MessageResolver for F {
     }
 }
 
-/// A catalogue of message templates keyed by message key or code.
+/// A catalogue of message templates keyed by message key or code, over the catalogue it falls
+/// back to.
 ///
-/// An issue is looked up by its message key first and by its code second, as Raoh for Java's
-/// `ResourceBundleMessageResolver` does. A template's `{name}` placeholders are filled from the
-/// issue's metadata; a template naming an entry the metadata lacks is passed over. When no
-/// template fits, the sentence is `validation failed: <code>`.
+/// A catalogue is a stack of layers, most specific first, as Raoh for Java's
+/// `ResourceBundleMessageResolver` reads a locale's `.properties` file before its parent's. An
+/// issue is looked up in one layer at a time: by its message key, then by its code, and only when
+/// neither gives a sentence in the next layer down. So a layer that translates just
+/// `invalid_format` wins over a refined key such as `invalid_format.email` in the layer beneath
+/// it. A template's `{name}` placeholders are filled from the issue's metadata; a template naming
+/// an entry the metadata lacks is passed over. When no template fits, the sentence is
+/// `validation failed: <code>`.
 ///
 /// ```
 /// use raoh::{Issue, MessageResolver, Messages};
@@ -37,10 +42,17 @@ impl<F: Fn(&Issue) -> String> MessageResolver for F {
 ///
 /// let mine = Messages::english().with_overrides([("too_short", "{min}+ characters, please")]);
 /// assert_eq!(mine.resolve(&issue), "3+ characters, please");
+///
+/// let french = Messages::from_properties("raoh.invalid_format=format invalide")
+///     .unwrap()
+///     .falling_back_to(Messages::english());
+/// let email = Issue::new("invalid_format").with_message_key("invalid_format.email");
+/// assert_eq!(french.resolve(&email), "format invalide");
 /// ```
 #[derive(Clone, Debug, Default)]
 pub struct Messages {
     templates: HashMap<String, String>,
+    parent: Option<Arc<Messages>>,
 }
 
 static ENGLISH: LazyLock<Messages> = LazyLock::new(|| {
@@ -48,11 +60,12 @@ static ENGLISH: LazyLock<Messages> = LazyLock::new(|| {
         .expect("the English catalogue is well formed")
 });
 
-/// The Japanese templates over the English ones, as a `ResourceBundle` falls back to its parent.
+/// The Japanese templates over the English ones, as `messages_ja.properties` sits over
+/// `messages.properties`.
 static JAPANESE: LazyLock<Messages> = LazyLock::new(|| {
-    let japanese = Messages::from_properties(include_str!("messages/ja.properties"))
-        .expect("the Japanese catalogue is well formed");
-    ENGLISH.with_overrides(japanese.templates)
+    Messages::from_properties(include_str!("messages/ja.properties"))
+        .expect("the Japanese catalogue is well formed")
+        .falling_back_to(&ENGLISH)
 });
 
 impl Messages {
@@ -62,7 +75,7 @@ impl Messages {
         &ENGLISH
     }
 
-    /// The Japanese catalogue, falling back to the English one for a key it lacks.
+    /// The Japanese catalogue, over the English one.
     pub fn japanese() -> &'static Messages {
         &JAPANESE
     }
@@ -74,7 +87,8 @@ impl Messages {
 
     /// Reads a catalogue written as Java's `Properties.load` reads a `.properties` file, such as
     /// the `messages*.properties` of Raoh for Java: one `raoh.<key>=<template>` per entry,
-    /// `\uXXXX` escapes and continued lines included. The `raoh.` prefix is optional.
+    /// `\uXXXX` escapes and continued lines included. The `raoh.` prefix is optional. The
+    /// catalogue falls back to nothing; give it one with [`falling_back_to`](Self::falling_back_to).
     pub fn from_properties(text: &str) -> Result<Self, PropertiesError> {
         let pairs = java::load_properties(text).map_err(|e| PropertiesError {
             line: e.line,
@@ -87,37 +101,74 @@ impl Messages {
                 None => (key, template),
             })
             .collect();
-        Ok(Self { templates })
+        Ok(Self {
+            templates,
+            parent: None,
+        })
     }
 
-    /// This catalogue with `overrides` added, replacing templates under the same key.
+    /// This catalogue with `parent` beneath its last layer, as a locale's file sits over its
+    /// parent's.
+    pub fn falling_back_to(self, parent: &Messages) -> Self {
+        let parent = match self.parent {
+            Some(own) => Arc::new((*own).clone().falling_back_to(parent)),
+            None => Arc::new(parent.clone()),
+        };
+        Self {
+            templates: self.templates,
+            parent: Some(parent),
+        }
+    }
+
+    /// A layer of `overrides` over this catalogue.
     pub fn with_overrides<K, T>(&self, overrides: impl IntoIterator<Item = (K, T)>) -> Self
     where
         K: Into<String>,
         T: Into<String>,
     {
-        let mut templates = self.templates.clone();
-        templates.extend(overrides.into_iter().map(|(k, t)| (k.into(), t.into())));
-        Self { templates }
+        Self {
+            templates: overrides
+                .into_iter()
+                .map(|(k, t)| (k.into(), t.into()))
+                .collect(),
+            parent: Some(Arc::new(self.clone())),
+        }
     }
 
-    /// Every key and its template, in no particular order.
+    /// Each layer, most specific first.
+    fn layers(&self) -> impl Iterator<Item = &Messages> {
+        std::iter::successors(Some(self), |layer| layer.parent.as_deref())
+    }
+
+    /// Every key and the template the most specific layer holding it has, in no particular
+    /// order.
     pub fn templates(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.templates.iter().map(|(k, t)| (k.as_str(), t.as_str()))
+        let mut seen: HashMap<&str, &str> = HashMap::new();
+        for layer in self.layers() {
+            for (key, template) in &layer.templates {
+                seen.entry(key.as_str()).or_insert(template.as_str());
+            }
+        }
+        seen.into_iter()
     }
 
-    /// The template under `key`, if there is one.
+    /// The template the most specific layer holding `key` has, if one does.
     pub fn template(&self, key: &str) -> Option<&str> {
-        self.templates.get(key).map(String::as_str)
+        self.layers()
+            .find_map(|layer| layer.templates.get(key))
+            .map(String::as_str)
     }
 }
 
 impl MessageResolver for Messages {
     fn resolve(&self, issue: &Issue) -> String {
-        [issue.message_key(), issue.code()]
-            .into_iter()
-            .filter_map(|key| self.template(key))
-            .find_map(|template| fill(template, issue.meta()))
+        self.layers()
+            .find_map(|layer| {
+                [issue.message_key(), issue.code()]
+                    .into_iter()
+                    .filter_map(|key| layer.templates.get(key))
+                    .find_map(|template| fill(template, issue.meta()))
+            })
             .unwrap_or_else(|| format!("validation failed: {}", issue.code()))
     }
 }
@@ -254,6 +305,39 @@ mod tests {
         assert_eq!(messages.template("required"), Some("必須"));
         assert_eq!(messages.template("blank"), Some("empty"));
         assert_eq!(Messages::from_properties("x=\\u12").unwrap_err().line(), 1);
+    }
+
+    #[test]
+    fn a_partial_translation_wins_over_a_refined_key_beneath_it() {
+        let french = Messages::from_properties("raoh.invalid_format=format invalide")
+            .unwrap()
+            .falling_back_to(Messages::english());
+        let email =
+            Issue::new(codes::INVALID_FORMAT).with_message_key(message_keys::INVALID_FORMAT_EMAIL);
+        assert_eq!(french.resolve(&email), "format invalide");
+        let overridden = Messages::english().with_overrides([("invalid_format", "bad form")]);
+        assert_eq!(overridden.resolve(&email), "bad form");
+    }
+
+    #[test]
+    fn an_unfillable_template_gives_way_to_the_same_key_beneath_it() {
+        let partial = Messages::english().with_overrides([("too_short", "{least}+ characters")]);
+        let issue = Issue::new(codes::TOO_SHORT).with_meta("min", 3);
+        assert_eq!(partial.resolve(&issue), "must be at least 3 characters");
+    }
+
+    #[test]
+    fn falling_back_goes_beneath_every_layer_there_is() {
+        let top = Messages::from_properties("raoh.blank=top")
+            .unwrap()
+            .falling_back_to(&Messages::from_properties("raoh.required=middle").unwrap())
+            .falling_back_to(Messages::english());
+        assert_eq!(top.resolve(&Issue::new(codes::BLANK)), "top");
+        assert_eq!(top.resolve(&Issue::new(codes::REQUIRED)), "middle");
+        assert_eq!(
+            top.resolve(&Issue::new(codes::TOO_BIG).with_meta("max", 2)),
+            "must have at most 2 elements"
+        );
     }
 
     #[test]

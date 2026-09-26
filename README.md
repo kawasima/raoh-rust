@@ -338,12 +338,14 @@ assert!(tree.is_ok());
 ## Messages in other languages
 
 `Messages::english()` and `Messages::japanese()` hold the catalogues Raoh for Java ships, word for
-word, plus a template for `invalid_format.json`; the Japanese one falls back to English for a key
-it lacks.
-`with_overrides` replaces templates by message key or code, and `Messages::from_properties` reads
-a `.properties` file as Java's `Properties.load` does, `\uXXXX` escapes included, so an existing
-Raoh for Java catalogue can be used as it is. A template's `{name}` placeholders are filled from
-`meta`.
+word, plus a template for `invalid_format.json`. A catalogue is a stack of layers, as a locale's
+`.properties` file sits over its parent's: `japanese()` is a layer over `english()`,
+`with_overrides` puts a layer of your own on top, and `falling_back_to` puts another catalogue
+beneath. An issue is looked up one layer at a time, by message key and then by code, so a layer
+that translates only `invalid_format` wins over the refined `invalid_format.email` beneath it, as
+in Raoh for Java. `Messages::from_properties` reads a `.properties` file as Java's
+`Properties.load` does, `\uXXXX` escapes included, so an existing Raoh for Java catalogue can be
+used as it is. A template's `{name}` placeholders are filled from `meta`.
 
 ```rust
 use raoh::json::prelude::*;

@@ -1215,7 +1215,7 @@
     "message" : "invalid value",
     "message_key" : "invalid_format.enum",
     "meta" : {
-      "allowed" : [ "red", "green" ]
+      "allowed" : [ "green", "red" ]
     },
     "path" : ""
   } ]

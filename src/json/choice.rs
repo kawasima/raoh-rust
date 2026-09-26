@@ -9,7 +9,7 @@ use std::borrow::Cow;
 
 /// A decoder of a JSON string naming one of `variants`, matched without regard to case.
 ///
-/// A string naming none is `invalid_format` with the names, lower-cased and in the order given,
+/// A string naming none is `invalid_format` with the names, lower-cased and sorted by code point,
 /// as `allowed`.
 ///
 /// ```
@@ -27,7 +27,9 @@ pub fn enum_of<'a, T: Clone>(variants: impl IntoIterator<Item = (&'a str, T)>) -
         .into_iter()
         .map(|(name, value)| (name.to_lowercase(), value))
         .collect();
-    let allowed: Vec<String> = variants.iter().map(|(name, _)| name.clone()).collect();
+    let mut allowed: Vec<String> = variants.iter().map(|(name, _)| name.clone()).collect();
+    allowed.sort();
+    allowed.dedup();
     EnumOf { variants, allowed }
 }
 
