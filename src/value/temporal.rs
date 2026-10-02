@@ -1,10 +1,14 @@
 //! Dates, times of day, date-times, date-times with an offset, and instants.
 //!
 //! Which text is one of these is decided by the grammar 199x-notation shares between Raoh and
-//! Souther; the value is then read off the text it admits. Years run from -999999999 to
-//! 999999999, beyond what the usual date crates hold, so the types are this crate's own.
+//! Souther, and the value is built from the fields its reading of the text gives, so the text is
+//! read once and by that grammar alone. Years run from -999999999 to 999999999, beyond what the
+//! usual date crates hold, so the types are this crate's own.
 
-use notation199x::{TemporalKind, check_temporal};
+use notation199x::{
+    TemporalDate, TemporalTime, read_date, read_date_time, read_instant, read_offset_date_time,
+    read_time,
+};
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
@@ -246,15 +250,14 @@ mod sealed {
 }
 
 macro_rules! chronological_by_ord {
-    ($t:ty, $kind:expr, $key:expr, $reader:ident) => {
+    ($t:ty, $key:expr, $read:expr) => {
         impl Chronological for $t {
             fn chronological_cmp(&self, other: &Self) -> Ordering {
                 self.cmp(other)
             }
 
             fn read(text: &str) -> Option<Self> {
-                check_temporal($kind, text).ok()?;
-                Some(Reader::new(text).$reader())
+                $read(text).ok()
             }
 
             const KEY: &'static str = $key;
@@ -262,20 +265,22 @@ macro_rules! chronological_by_ord {
     };
 }
 
-chronological_by_ord!(Date, TemporalKind::Date, "invalid_format.date", date);
-chronological_by_ord!(Time, TemporalKind::Time, "invalid_format.time", time);
-chronological_by_ord!(
-    DateTime,
-    TemporalKind::DateTime,
-    "invalid_format.date_time",
-    date_time
-);
-chronological_by_ord!(
-    Instant,
-    TemporalKind::Instant,
-    "invalid_format.instant",
-    instant
-);
+chronological_by_ord!(Date, "invalid_format.date", |text| read_date(text)
+    .map(date));
+chronological_by_ord!(Time, "invalid_format.time", |text| read_time(text)
+    .map(time));
+chronological_by_ord!(DateTime, "invalid_format.date_time", |text| read_date_time(
+    text
+)
+.map(|read| DateTime {
+    date: date(read.date),
+    time: time(read.time),
+}));
+chronological_by_ord!(Instant, "invalid_format.instant", |text| read_instant(text)
+    .map(|read| Instant {
+        seconds: read.epoch_second,
+        nano: read.nanosecond,
+    }));
 
 impl Chronological for OffsetDateTime {
     fn chronological_cmp(&self, other: &Self) -> Ordering {
@@ -283,11 +288,37 @@ impl Chronological for OffsetDateTime {
     }
 
     fn read(text: &str) -> Option<Self> {
-        check_temporal(TemporalKind::OffsetDateTime, text).ok()?;
-        Some(Reader::new(text).offset_date_time())
+        let read = read_offset_date_time(text).ok()?;
+        Some(OffsetDateTime {
+            date_time: DateTime {
+                date: date(read.date_time.date),
+                time: time(read.date_time.time),
+            },
+            offset_seconds: read.offset_seconds,
+        })
     }
 
     const KEY: &'static str = "invalid_format.offset_date_time";
+}
+
+// The fields 199x-notation gives are of text it admitted, within the ranges the types hold.
+
+fn date(read: TemporalDate) -> Date {
+    Date {
+        year: read.year,
+        month: read.month,
+        day: read.day,
+    }
+}
+
+/// A fraction written as `.000` and none are the same time of day here.
+fn time(read: TemporalTime) -> Time {
+    Time {
+        hour: read.hour,
+        minute: read.minute,
+        second: read.second,
+        nano: read.nanosecond.unwrap_or(0),
+    }
 }
 
 macro_rules! from_str {
@@ -308,155 +339,6 @@ from_str!(Time, "local time");
 from_str!(DateTime, "local date-time");
 from_str!(OffsetDateTime, "offset date-time");
 from_str!(Instant, "instant");
-
-/// Reads the fields of text that `check_temporal` has admitted, so every read here succeeds.
-struct Reader<'a> {
-    text: &'a [u8],
-    at: usize,
-}
-
-impl<'a> Reader<'a> {
-    fn new(text: &'a str) -> Self {
-        Self {
-            text: text.as_bytes(),
-            at: 0,
-        }
-    }
-
-    fn peek(&self) -> Option<u8> {
-        self.text.get(self.at).copied()
-    }
-
-    fn skip(&mut self) {
-        self.at += 1;
-    }
-
-    fn number(&mut self) -> i64 {
-        let mut n = 0i64;
-        while let Some(b) = self.peek().filter(u8::is_ascii_digit) {
-            n = n * 10 + i64::from(b - b'0');
-            self.skip();
-        }
-        n
-    }
-
-    fn two(&mut self) -> u8 {
-        let n = (self.text[self.at] - b'0') * 10 + (self.text[self.at + 1] - b'0');
-        self.at += 2;
-        n
-    }
-
-    fn date(&mut self) -> Date {
-        let negative = match self.peek() {
-            Some(b'-') => {
-                self.skip();
-                true
-            }
-            Some(b'+') => {
-                self.skip();
-                false
-            }
-            _ => false,
-        };
-        let year = self.number();
-        self.skip();
-        let month = self.two();
-        self.skip();
-        let day = self.two();
-        let year = if negative { -year } else { year };
-        Date {
-            year: year as i32,
-            month,
-            day,
-        }
-    }
-
-    /// The hour, minute, second and nanosecond, with the hour as written, 24 included.
-    fn clock(&mut self) -> (u8, u8, u8, u32) {
-        let hour = self.two();
-        self.skip();
-        let minute = self.two();
-        let mut second = 0;
-        let mut nano = 0;
-        if self.peek() == Some(b':') {
-            self.skip();
-            second = self.two();
-            if self.peek() == Some(b'.') {
-                self.skip();
-                let start = self.at;
-                let fraction = self.number();
-                let digits = self.at - start;
-                nano = (fraction * 10i64.pow(9 - digits as u32)) as u32;
-            }
-        }
-        (hour, minute, second, nano)
-    }
-
-    fn time(&mut self) -> Time {
-        let (hour, minute, second, nano) = self.clock();
-        Time {
-            hour,
-            minute,
-            second,
-            nano,
-        }
-    }
-
-    fn date_time(&mut self) -> DateTime {
-        let date = self.date();
-        self.skip();
-        DateTime {
-            date,
-            time: self.time(),
-        }
-    }
-
-    fn offset(&mut self) -> i32 {
-        match self.peek() {
-            Some(b'Z') => {
-                self.skip();
-                0
-            }
-            Some(sign) => {
-                self.skip();
-                let hours = i32::from(self.two());
-                self.skip();
-                let minutes = i32::from(self.two());
-                let mut seconds = 0;
-                if self.peek() == Some(b':') {
-                    self.skip();
-                    seconds = i32::from(self.two());
-                }
-                let total = hours * 3600 + minutes * 60 + seconds;
-                if sign == b'-' { -total } else { total }
-            }
-            None => 0,
-        }
-    }
-
-    fn offset_date_time(&mut self) -> OffsetDateTime {
-        let date_time = self.date_time();
-        OffsetDateTime {
-            date_time,
-            offset_seconds: self.offset(),
-        }
-    }
-
-    /// An instant: the date-time with its offset applied, where 24:00:00 is the start of the
-    /// next day.
-    fn instant(&mut self) -> Instant {
-        let date = self.date();
-        self.skip();
-        let (hour, minute, second, nano) = self.clock();
-        let offset = i64::from(self.offset());
-        let seconds = date.days_from_epoch() * SECONDS_PER_DAY
-            + i64::from(hour) * 3600
-            + i64::from(minute) * 60
-            + i64::from(second)
-            - offset;
-        Instant { seconds, nano }
-    }
-}
 
 fn is_leap(year: i64) -> bool {
     year.rem_euclid(4) == 0 && (year.rem_euclid(100) != 0 || year.rem_euclid(400) == 0)
