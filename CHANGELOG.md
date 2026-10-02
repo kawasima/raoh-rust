@@ -44,7 +44,8 @@ New:
   `contains_all` and `to_set` compare by it, so they work on lists of floats and decimals as the
   value model compares them, and `to_set` gives a `Set`. Every value a decoder gives has it, maps
   and products of up to 16 values included; `same_by_eq!` gives it to a type of your own, such as
-  the enum `enum_of` decodes into.
+  the enum `enum_of` decodes into, and `meta_by_display!` gives such a type the message form
+  `unique` and `contains` write it in.
 - `contains`, `contains_all` and `to_set` on lists; `non_empty`, `min_size`, `max_size` and `size`
   on `dict`.
 - `flat` fields, `strict(decoder, names)` around any decoder, `discriminate_by`,

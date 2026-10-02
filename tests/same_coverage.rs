@@ -26,6 +26,62 @@ enum Color {
 
 raoh::same_by_eq!(Color);
 
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Color::Red => "red",
+            Color::Green => "green",
+        })
+    }
+}
+
+raoh::meta_by_display!(Color);
+
+/// `unique`, `contains` and `contains_all`, which also write their elements into an issue's
+/// metadata, apply to a list of `element`'s output.
+fn compared<D>(element: D, wanted: D::Output)
+where
+    D: Decoder<Value> + Clone + 'static,
+    D::Output: Same + Clone + Into<raoh::MetaValue> + Send + Sync + 'static,
+{
+    let _ = element.clone().list().unique();
+    let _ = element.clone().list().contains(wanted.clone());
+    let _ = element.list().contains_all([wanted]);
+}
+
+/// Every output whose type the specification gives a message form can be compared as an element:
+/// scalars, temporal values, symbols and lists of them.
+#[test]
+fn every_output_with_a_message_form_can_be_compared_as_an_element() {
+    compared(string(), String::new());
+    compared(i32(), 0);
+    compared(i64(), 0);
+    compared(u32(), 0);
+    compared(u64(), 0);
+    compared(f32(), 0.0);
+    compared(f64(), 0.0);
+    compared(decimal(), raoh::Decimal::zero());
+    compared(bool(), true);
+    compared(
+        string().uuid(),
+        "00000000-0000-0000-0000-000000000000".parse().unwrap(),
+    );
+    compared(string().uri(), "a:".parse().unwrap());
+    compared(string().instant(), "2024-01-01T00:00:00Z".parse().unwrap());
+    compared(string().date(), "2024-01-01".parse().unwrap());
+    compared(string().time(), "00:00".parse().unwrap());
+    compared(string().date_time(), "2024-01-01T00:00".parse().unwrap());
+    compared(
+        string().offset_date_time(),
+        "2024-01-01T00:00Z".parse().unwrap(),
+    );
+    compared(
+        enum_of([("red", Color::Red), ("green", Color::Green)]),
+        Color::Red,
+    );
+    compared(i64().list(), vec![1]);
+}
+
 #[test]
 fn every_output_can_be_an_element_of_a_set() {
     // Scalars and the conversions of a string.

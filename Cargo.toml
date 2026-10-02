@@ -19,7 +19,7 @@ num-bigint = "0.5"
 num-traits = "0.2"
 # The text rules Raoh and Souther share: Unicode 18.0.0 case conversion, normalization and
 # White_Space, the temporal grammar and the pattern language.
-notation199x = { git = "https://github.com/raoh-project/199x-notation", rev = "387b20e14538fc87737344cfaa06f169d1e77c83" }
+notation199x = { git = "https://github.com/raoh-project/199x-notation", rev = "06bc0961a1bd54f508af95b2ff1d203ba2555688" }
 
 [features]
 # Has serde_json keep every number as the text it was written with, so that the decoders read the

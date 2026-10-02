@@ -36,8 +36,13 @@ Optional features:
 | `arbitrary_precision` | Turns on `serde_json`'s feature of that name, so that a number keeps the text it was written with (see [Numbers](#numbers)) |
 | `preserve_order`      | Turns on `serde_json`'s feature of that name, so that an object keeps its members in the order written |
 
-An application that decodes numbers should enable `arbitrary_precision`: without it `1.50` is read
-as `1.5` and the scale is lost before a decoder sees it.
+An application that decodes decimals should enable `arbitrary_precision`: without it `1.50` is
+read as `1.5` and the scale is lost before a decoder sees it. It is also what tells `-0.0` from
+`0`, reads an integer past `u64` as one, and rounds a number to `f32` once. It has a cost:
+`serde_json` then keeps every number of the input as a `String` of its own, which made reading an
+array of 1000 numbers 3.5 to 4.6 times slower, 15 µs to 54 µs for doubles, whether or not they
+are decoded. An application whose input has no decimal, and that does not need those, can leave it
+off: `int` still refuses `1.0` and `1e2`, which `serde_json` reads as floats.
 
 The minimum supported Rust version is 1.88.
 
@@ -278,7 +283,9 @@ once, by the innermost one that does not know it.
 `unique`, `contains`, `contains_all` and `to_set` compare elements by `Same`, the value model's
 sameness, not by Rust's `Eq`: for floats -0 and +0 are two values and every NaN one, and decimals
 of different scales differ. So `f64().list().to_set()` is a `Set<f64>` of each value once, though
-`f64` has no `Eq` or `Hash`.
+`f64` has no `Eq` or `Hash`. A type of your own, such as the enum `enum_of` decodes into, takes
+`same_by_eq!` for `Same`, and `meta_by_display!` for the message form `unique` and `contains`
+write an element in.
 
 A missing member and a `null` one are different inputs. `field("note", string().nullable())`
 accepts `null` but reports a missing member as `required`, while `optional_field` accepts a

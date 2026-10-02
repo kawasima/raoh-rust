@@ -219,6 +219,42 @@ impl Hash for MetaValue {
     }
 }
 
+/// Gives a type of your own the message form of a symbol, the text its `Display` writes, so that
+/// it can be metadata: an element `unique` lists among `duplicates`, or the one `contains` looks
+/// for. The enum an [`enum_of`](crate::json::enum_of) decodes into is such a type; with
+/// [`same_by_eq!`](crate::same_by_eq) too, a list of it takes every list constraint.
+///
+/// ```
+/// use std::fmt;
+///
+/// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// enum Color { Red, Green }
+///
+/// impl fmt::Display for Color {
+///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+///         f.write_str(match self { Color::Red => "red", Color::Green => "green" })
+///     }
+/// }
+///
+/// raoh::same_by_eq!(Color);
+/// raoh::meta_by_display!(Color);
+///
+/// use raoh::json::prelude::*;
+/// let colors = enum_of([("red", Color::Red), ("green", Color::Green)]).list().unique();
+/// let issues = colors.decode(&json!(["red", "RED"])).unwrap_err();
+/// assert_eq!(issues.iter().next().unwrap().message(), "must not contain duplicates: [red]");
+/// ```
+#[macro_export]
+macro_rules! meta_by_display {
+    ($($t:ty),* $(,)?) => {
+        $(impl ::std::convert::From<$t> for $crate::MetaValue {
+            fn from(value: $t) -> Self {
+                $crate::MetaValue::String(::std::string::ToString::to_string(&value))
+            }
+        })*
+    };
+}
+
 macro_rules! from_signed {
     ($($t:ty),*) => {
         $(impl From<$t> for MetaValue {
