@@ -149,7 +149,7 @@ impl<T: Integer> Decoder<Value> for IntDecoder<T> {
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
         let found = match &self.source {
             Source::Json => match input {
-                Value::Number(n) => match read_integer(&lexeme(n)) {
+                Value::Number(n) => match integral(n) {
                     Integral::Value(v) => {
                         T::from_integer(v).ok_or_else(|| numeric_range(path, T::EXPECTED))
                     }
@@ -172,6 +172,18 @@ impl<T: Integer> Decoder<Value> for IntDecoder<T> {
         };
         let value = found.map_err(|issue| self.steps.base_issue(issue))?;
         self.steps.run(value, path)
+    }
+}
+
+/// What a JSON number is as an integer. `serde_json` holds as an `i64` or `u64` only a number
+/// written as an integer, so one it holds is read without its text.
+fn integral(n: &serde_json::Number) -> Integral {
+    if let Some(i) = n.as_i64() {
+        Integral::Value(i128::from(i))
+    } else if let Some(u) = n.as_u64() {
+        Integral::Value(i128::from(u))
+    } else {
+        read_integer(&lexeme(n))
     }
 }
 
@@ -359,8 +371,8 @@ impl<F: Float> Decoder<Value> for FloatDecoder<F> {
 
     fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<F, Issues> {
         let found = match input {
-            Value::Number(n) => match lexeme(n).parse::<F>() {
-                Ok(v) if !v.infinite() => Ok(v),
+            Value::Number(n) => match F::from_number(n) {
+                Some(v) if !v.infinite() => Ok(v),
                 _ => Err(numeric_range(path, F::EXPECTED)),
             },
             Value::Null => Err(required(path)),

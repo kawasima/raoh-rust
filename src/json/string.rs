@@ -132,19 +132,26 @@ impl StringDecoder {
     /// context-dependent ones included (a capital sigma becomes a final sigma at the end of a
     /// word), and no language's tailoring.
     pub fn lowercase(self) -> Self {
-        self.transform(notation199x::lowercase)
+        self.transform(lowercase)
     }
 
     /// Converts to upper case with Unicode 18.0.0's default case mapping: the full mappings
     /// (`ß` becomes `SS`), and no language's tailoring.
     pub fn uppercase(self) -> Self {
-        self.transform(notation199x::uppercase)
+        self.transform(uppercase)
     }
 
     /// Applies Unicode 18.0.0 normalization in `form`.
     pub fn normalize(self, form: NormalizationForm) -> Self {
         let form = form.form();
-        self.transform(move |s| notation199x::normalize(form, s))
+        // ASCII text is in every normalization form already.
+        self.transform(move |s| {
+            if s.is_ascii() {
+                s.to_owned()
+            } else {
+                notation199x::normalize(form, s)
+            }
+        })
     }
 
     /// Requires a character that is not whitespace, in the sense [`trim`](Self::trim) uses:
@@ -583,6 +590,26 @@ impl Decoder<Value> for UriDecoder {
     }
 }
 
+/// Unicode's default lowercase mapping. For ASCII text that is ASCII's, which is written without
+/// looking the characters up in Unicode's tables: no ASCII character maps to anything else, and
+/// the one context the mapping has, a final sigma, is not ASCII.
+fn lowercase(s: &str) -> String {
+    if s.is_ascii() {
+        s.to_ascii_lowercase()
+    } else {
+        notation199x::lowercase(s)
+    }
+}
+
+/// Unicode's default uppercase mapping, ASCII's for ASCII text, as [`lowercase`] is.
+fn uppercase(s: &str) -> String {
+    if s.is_ascii() {
+        s.to_ascii_uppercase()
+    } else {
+        notation199x::uppercase(s)
+    }
+}
+
 /// `atext` of RFC 5322: the ASCII letters and digits and ``!#$%&'*+-/=?^_`{|}~``.
 fn is_atext(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b"!#$%&'*+-/=?^_`{|}~".contains(&b)
@@ -666,6 +693,16 @@ mod tests {
         }
         for not_blank in ["\u{1c}", "\u{0}", "\u{200b}"] {
             assert!(string().non_blank().decode(&json!(not_blank)).is_ok());
+        }
+    }
+
+    #[test]
+    fn ascii_text_is_mapped_as_unicode_maps_it() {
+        let ascii: String = (0u8..128).map(char::from).collect();
+        assert_eq!(lowercase(&ascii), notation199x::lowercase(&ascii));
+        assert_eq!(uppercase(&ascii), notation199x::uppercase(&ascii));
+        for form in [Form::Nfc, Form::Nfd, Form::Nfkc, Form::Nfkd] {
+            assert_eq!(notation199x::normalize(form, &ascii), ascii);
         }
     }
 

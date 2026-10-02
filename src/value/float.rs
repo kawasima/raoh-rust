@@ -47,6 +47,10 @@ pub trait Float:
     /// The bits of the value, with every NaN given the same bits.
     #[doc(hidden)]
     fn canonical_bits(self) -> u64;
+
+    /// The JSON number rounded to this type once, or `None` when it cannot be read.
+    #[doc(hidden)]
+    fn from_number(n: &serde_json::Number) -> Option<Self>;
 }
 
 impl Float for f32 {
@@ -76,6 +80,11 @@ impl Float for f32 {
             u64::from(self.to_bits())
         }
     }
+
+    /// From the number's text, so that it is rounded once, to binary32, and not first to binary64.
+    fn from_number(n: &serde_json::Number) -> Option<Self> {
+        crate::json::lexeme(n).parse().ok()
+    }
 }
 
 impl Float for f64 {
@@ -104,6 +113,13 @@ impl Float for f64 {
         } else {
             self.to_bits()
         }
+    }
+
+    /// What `serde_json` reads: with `arbitrary_precision`, the text parsed, rounded once, and
+    /// nothing for a number beyond the range; without it, the `f64` it read, or an integer
+    /// rounded to the nearest `f64`.
+    fn from_number(n: &serde_json::Number) -> Option<Self> {
+        n.as_f64()
     }
 }
 

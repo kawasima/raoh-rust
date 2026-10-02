@@ -128,9 +128,16 @@ pub(crate) fn node_type(value: &Value) -> &'static str {
 }
 
 /// The text a number was written with, or with `serde_json`'s `arbitrary_precision` off, the text
-/// of the value it was read as.
-pub(crate) fn lexeme(n: &serde_json::Number) -> String {
-    n.to_string()
+/// of the value it was read as. With the feature the text is borrowed, not written out again.
+pub(crate) fn lexeme(n: &serde_json::Number) -> std::borrow::Cow<'_, str> {
+    #[cfg(feature = "arbitrary_precision")]
+    {
+        std::borrow::Cow::Borrowed(n.as_str())
+    }
+    #[cfg(not(feature = "arbitrary_precision"))]
+    {
+        std::borrow::Cow::Owned(n.to_string())
+    }
 }
 
 pub(crate) fn required(path: &Path<'_>) -> Issue {
