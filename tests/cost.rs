@@ -59,6 +59,22 @@ fn reading_a_number_allocates_nothing() {
     assert!(n <= 20, "{n} allocations for 1000 doubles");
 }
 
+#[test]
+fn matching_a_pattern_again_allocates_nothing() {
+    // A matcher is kept between matches, with what it has worked out; one made for each match
+    // would allocate its cache every time.
+    let code = string().pattern("[a-z]+[0-9]+");
+    let input = json!("abcdefghijklmnopqrstuvwxyz0123456789");
+    code.decode(&input).unwrap();
+    let n = allocations(|| {
+        for _ in 0..100 {
+            code.decode(&input).unwrap();
+        }
+    });
+    // Each decode gives a String it allocates; the match itself allocates nothing.
+    assert!(n <= 100, "{n} allocations for 100 matches");
+}
+
 /// The least time of a few runs of `f`, which the machine's other work adds the least to.
 fn least(f: impl Fn()) -> Duration {
     (0..5)

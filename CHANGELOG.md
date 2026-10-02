@@ -58,6 +58,8 @@ Cost:
 
 - Reading a number allocates nothing, and lower-casing, upper-casing and normalizing ASCII text
   do not look its characters up in Unicode's tables.
+- `pattern` keeps a matcher for each thread that decodes with it at once, with what its matches
+  have worked out, so a value is matched in lookups.
 - A strict decoder takes time in the members of its object, and `multiple_of` in the digits of the
   decimal, where both took time in their square. `tests/cost.rs` holds every decoder that goes
   over an input to time that grows with it once, and counts the allocations of reading numbers.

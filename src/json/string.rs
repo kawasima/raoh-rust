@@ -12,11 +12,14 @@ use crate::value::temporal::{Date, DateTime, Instant, OffsetDateTime, Time};
 use crate::value::uri::Uri;
 use crate::value::uuid::Uuid;
 use crate::{codes, message_keys};
-use notation199x::{Form, Pattern, PatternRead, is_white_space, read_pattern, scalar_count};
+use notation199x::{
+    Form, OwnedMatcher, Pattern, PatternRead, is_white_space, read_pattern, scalar_count,
+};
 use serde_json::Value;
 use std::marker::PhantomData;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, TryLockError};
 
 /// A decoder of a JSON string.
 ///
@@ -272,7 +275,7 @@ impl StringDecoder {
     /// shares, and means the same set of strings in every implementation: matching is over
     /// Unicode scalar values, case-sensitive and of the whole string; `.` is every character but
     /// the line terminators, and `\d`, `\w` and `\s` are ASCII. A value is matched in one pass
-    /// over it, whatever the pattern.
+    /// over it, whatever the pattern, and what one match works out is kept for the next.
     ///
     /// ```
     /// use raoh::json::prelude::*;
@@ -288,16 +291,17 @@ impl StringDecoder {
     /// past one of its limits: a count above 134217727, groups nested more than 200 deep, or more
     /// than 250000 states.
     pub fn pattern(mut self, pattern: &str) -> Self {
-        let compiled: Arc<Pattern> = match read_pattern(pattern) {
-            PatternRead::Pattern(compiled) => Arc::new(compiled),
+        let compiled = match read_pattern(pattern) {
+            PatternRead::Pattern(compiled) => compiled,
             PatternRead::Refused(refused) => panic!("{pattern:?} is not a pattern: {refused:?}"),
             PatternRead::Beyond(beyond) => {
                 panic!("the pattern {pattern:?} is past a limit: {beyond:?}")
             }
         };
+        let matchers = Matchers::new(compiled);
         let pattern = pattern.to_owned();
         self.steps.require(
-            move |s| compiled.matches(s),
+            move |s| matchers.matches(s),
             move |_| Issue::new(codes::INVALID_FORMAT).with_meta("pattern", pattern.clone()),
         );
         self
@@ -476,6 +480,60 @@ impl StringDecoder {
     /// else is `invalid_format`.
     pub fn offset_date_time(self) -> TemporalDecoder<OffsetDateTime> {
         TemporalDecoder::new(self)
+    }
+}
+
+/// The matchers of one pattern, kept for the threads that decode with it.
+///
+/// A matcher keeps what its matches work out for the next, so a value is matched in lookups rather
+/// than worked out afresh. It is not shared during a match, so there is a slot for a matcher for
+/// each thread the machine runs at once, and the pattern is shared by them all. A thread tries the
+/// slot its number falls on first, and so finds the matcher it used before, then the others; a
+/// slot is locked only while its matcher matches, and a thread that finds every slot in use
+/// matches with a matcher of its own that is not kept. Each slot sits apart from the others in
+/// memory, so that threads at different slots do not slow each other down. What is kept stays
+/// bounded however many threads there are: a matcher keeps about two megabytes at most.
+struct Matchers {
+    pattern: Arc<Pattern>,
+    slots: Box<[Slot]>,
+}
+
+/// One matcher's place, aligned to a line of the processor's cache of its own.
+#[repr(align(128))]
+struct Slot(Mutex<Option<OwnedMatcher<Arc<Pattern>>>>);
+
+/// The number each thread is given the first time it matches, which picks the slot it tries first.
+static THREADS: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    static THREAD: usize = THREADS.fetch_add(1, Ordering::Relaxed);
+}
+
+impl Matchers {
+    fn new(pattern: Pattern) -> Self {
+        let slots = std::thread::available_parallelism().map_or(1, usize::from);
+        Self {
+            pattern: Arc::new(pattern),
+            slots: (0..slots).map(|_| Slot(Mutex::new(None))).collect(),
+        }
+    }
+
+    fn matches(&self, subject: &str) -> bool {
+        let first = THREAD.with(|n| *n) % self.slots.len();
+        for i in 0..self.slots.len() {
+            let slot = &self.slots[(first + i) % self.slots.len()].0;
+            let mut held = match slot.try_lock() {
+                Ok(held) => held,
+                // A panic inside a match leaves nothing kept wrong, since what a matcher keeps
+                // changes how fast a match is and never what it answers.
+                Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+                Err(TryLockError::WouldBlock) => continue,
+            };
+            return held
+                .get_or_insert_with(|| OwnedMatcher::new(Arc::clone(&self.pattern)))
+                .matches(subject);
+        }
+        OwnedMatcher::new(&*self.pattern).matches(subject)
     }
 }
 
@@ -777,6 +835,29 @@ mod tests {
         assert_eq!(issue.meta()["pattern"], MetaValue::from("[a-z]+"));
         assert!(string().pattern(r"\d{3}").decode(&json!("123")).is_ok());
         assert!(string().pattern(r"\d{3}").decode(&json!("١٢٣")).is_err());
+    }
+
+    #[test]
+    fn threads_matching_at_once_get_the_same_answers() {
+        let decoder = std::sync::Arc::new(string().pattern("[a-z]+[0-9]+"));
+        // More threads than slots, so that some match with a matcher of their own.
+        let threads = 4 * std::thread::available_parallelism().map_or(1, usize::from);
+        let handles: Vec<_> = (0..threads)
+            .map(|t| {
+                let decoder = std::sync::Arc::clone(&decoder);
+                std::thread::spawn(move || {
+                    for i in 0..200 {
+                        let good = format!("ab{t}{i}");
+                        let bad = format!("{t}{i}ab");
+                        assert!(decoder.decode(&json!(good)).is_ok(), "{good}");
+                        assert!(decoder.decode(&json!(bad)).is_err(), "{bad}");
+                    }
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().unwrap();
+        }
     }
 
     #[test]

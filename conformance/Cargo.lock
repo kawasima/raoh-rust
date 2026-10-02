@@ -47,7 +47,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "notation199x"
 version = "0.1.0"
-source = "git+https://github.com/raoh-project/199x-notation?rev=bd1d64ac9ce2037af5e84ca356231c641f045500#bd1d64ac9ce2037af5e84ca356231c641f045500"
+source = "git+https://github.com/raoh-project/199x-notation?rev=8a53bb5ce8f8a60658cafcae1ec532709cb36159#8a53bb5ce8f8a60658cafcae1ec532709cb36159"
 
 [[package]]
 name = "num-bigint"
