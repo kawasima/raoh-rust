@@ -18,7 +18,7 @@ use std::borrow::Cow;
 /// #[derive(Debug)]
 /// struct Age(u32);
 ///
-/// fn age() -> impl Decoder<Value, Output = Age> {
+/// fn age() -> impl Decoder<Json, Output = Age> {
 ///     u32().range(0..=150).map(Age)
 /// }
 ///

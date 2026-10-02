@@ -14,7 +14,7 @@ use raoh::{Time, one_of};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-type Dec = BoxDecoder<Value, V>;
+type Dec = BoxDecoder<raoh::json::Json, V>;
 
 /// An argument of a form, as catalog/operations.json declares it.
 #[derive(Clone, Debug)]

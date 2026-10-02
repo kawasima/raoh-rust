@@ -1,13 +1,13 @@
+use super::Json;
 use super::steps::Steps;
 use super::string::StringDecoder;
 use super::text::Source;
-use super::{lexeme, node_type, required};
+use super::{View, required};
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
 use crate::value::decimal::Decimal;
 use crate::{codes, message_keys};
-use serde_json::Value;
 use std::cmp::Ordering;
 use std::ops::RangeInclusive;
 
@@ -15,8 +15,8 @@ use std::ops::RangeInclusive;
 /// scale, or with [`StringDecoder::to_decimal`], a string.
 ///
 /// From JSON, missing or `null` is `required`, and any other kind `type_mismatch` with `expected`
-/// `number`. The scale is the one written only with `serde_json`'s `arbitrary_precision` on; see
-/// [the module documentation](super).
+/// `number`. The scale is the one written; a [`serde_json::Value`] keeps it only with
+/// `serde_json`'s `arbitrary_precision` on, see [the module documentation](super).
 ///
 /// From a string, the text is `[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?`; anything else,
 /// and an exponent the scale cannot hold, is `type_mismatch` with `expected` `decimal` and no
@@ -57,21 +57,21 @@ impl DecimalDecoder {
     }
 }
 
-impl Decoder<Value> for DecimalDecoder {
+impl Decoder<Json> for DecimalDecoder {
     type Output = Decimal;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Decimal, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<Decimal, Issues> {
         let found = match &self.source {
-            Source::Json => match input {
-                Value::Number(n) => Decimal::read(&lexeme(n)).ok_or_else(|| {
+            Source::Json => match input.view() {
+                View::Number(n) => Decimal::read(&n.lexeme()).ok_or_else(|| {
                     Issue::at_path(path, codes::TYPE_MISMATCH)
                         .with_meta("expected", "number")
                         .with_meta("actual", "number")
                 }),
-                Value::Null => Err(required(path)),
-                other => Err(Issue::at_path(path, codes::TYPE_MISMATCH)
+                view if view.is_null_or_missing() => Err(required(path)),
+                view => Err(Issue::at_path(path, codes::TYPE_MISMATCH)
                     .with_meta("expected", "number")
-                    .with_meta("actual", node_type(other))),
+                    .with_meta("actual", view.kind())),
             },
             Source::Text(string) => {
                 let text = string.decode_at(input, path)?;

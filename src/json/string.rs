@@ -5,6 +5,7 @@ use super::number::IntDecoder;
 use super::steps::Steps;
 use super::temporal::TemporalDecoder;
 use super::unexpected;
+use super::{Json, View};
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
@@ -15,7 +16,6 @@ use crate::{codes, message_keys};
 use notation199x::{
     Form, OwnedMatcher, Pattern, PatternRead, is_white_space, read_pattern, scalar_count,
 };
-use serde_json::Value;
 use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -48,13 +48,13 @@ pub fn string() -> StringDecoder {
     StringDecoder::default()
 }
 
-impl Decoder<Value> for StringDecoder {
+impl Decoder<Json> for StringDecoder {
     type Output = String;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<String, Issues> {
-        match input {
-            Value::String(s) => self.steps.run(s.clone(), path),
-            other => Err(self.steps.base_issue(unexpected(path, "string", other))),
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<String, Issues> {
+        match input.view() {
+            View::String(s) => self.steps.run(s.to_owned(), path),
+            _ => Err(self.steps.base_issue(unexpected(path, "string", input))),
         }
     }
 }
@@ -579,10 +579,10 @@ fn conversion_failed(path: &Path<'_>, key: &'static str, custom: &Option<String>
     }
 }
 
-impl<T: FromStr> Decoder<Value> for Parse<T> {
+impl<T: FromStr> Decoder<Json> for Parse<T> {
     type Output = T;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<T, Issues> {
         let s = self.string.decode_at(input, path)?;
         s.parse()
             .map_err(|_| conversion_failed(path, codes::INVALID_FORMAT, &self.message))
@@ -604,10 +604,10 @@ impl UuidDecoder {
     }
 }
 
-impl Decoder<Value> for UuidDecoder {
+impl Decoder<Json> for UuidDecoder {
     type Output = Uuid;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Uuid, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<Uuid, Issues> {
         let s = self.string.decode_at(input, path)?;
         s.parse()
             .map_err(|_| conversion_failed(path, message_keys::INVALID_FORMAT_UUID, &self.message))
@@ -631,10 +631,10 @@ impl UriDecoder {
     }
 }
 
-impl Decoder<Value> for UriDecoder {
+impl Decoder<Json> for UriDecoder {
     type Output = Uri;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Uri, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<Uri, Issues> {
         let s = self.string.decode_at(input, path)?;
         let key = if self.web {
             message_keys::INVALID_FORMAT_URL
@@ -705,6 +705,7 @@ fn is_email(s: &str) -> bool {
 mod tests {
     use super::*;
     use crate::MetaValue;
+    use serde_json::Value;
     use serde_json::json;
 
     fn first<T: std::fmt::Debug>(result: Result<T, Issues>) -> Issue {

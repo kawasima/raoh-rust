@@ -1,3 +1,4 @@
+use super::Json;
 use super::steps::Steps;
 use super::string::StringDecoder;
 use crate::decoder::Decoder;
@@ -5,7 +6,6 @@ use crate::issue::{Issue, Issues};
 use crate::path::Path;
 use crate::value::temporal::Chronological;
 use crate::{codes, message_keys};
-use serde_json::Value;
 use std::cmp::Ordering;
 
 /// A decoder of a temporal value read from a string: what [`StringDecoder::instant`],
@@ -41,10 +41,10 @@ impl<T> TemporalDecoder<T> {
     }
 }
 
-impl<T: Chronological> Decoder<Value> for TemporalDecoder<T> {
+impl<T: Chronological> Decoder<Json> for TemporalDecoder<T> {
     type Output = T;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<T, Issues> {
         let text = self.string.decode_at(input, path)?;
         let value = T::read(&text).ok_or_else(|| {
             self.steps

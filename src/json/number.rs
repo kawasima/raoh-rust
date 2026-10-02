@@ -1,14 +1,14 @@
+use super::Json;
 use super::steps::Steps;
 use super::string::StringDecoder;
 use super::text::{Integral, Source, read_integer};
-use super::{lexeme, node_type, required};
+use super::{View, required};
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::meta::MetaValue;
 use crate::path::Path;
 use crate::value::float::{Float, float_order, float_same};
 use crate::{codes, message_keys};
-use serde_json::Value;
 use std::cmp::Ordering;
 use std::ops::RangeInclusive;
 
@@ -143,21 +143,21 @@ fn numeric_range(path: &Path<'_>, name: &'static str) -> Issue {
     expected(path, name).with_message_key(message_keys::TYPE_MISMATCH_NUMERIC_RANGE)
 }
 
-impl<T: Integer> Decoder<Value> for IntDecoder<T> {
+impl<T: Integer> Decoder<Json> for IntDecoder<T> {
     type Output = T;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<T, Issues> {
         let found = match &self.source {
-            Source::Json => match input {
-                Value::Number(n) => match integral(n) {
+            Source::Json => match input.view() {
+                View::Number(n) => match n.integral() {
                     Integral::Value(v) => {
                         T::from_integer(v).ok_or_else(|| numeric_range(path, T::EXPECTED))
                     }
                     Integral::TooLarge => Err(numeric_range(path, T::EXPECTED)),
                     Integral::Not => Err(expected(path, T::EXPECTED).with_meta("actual", "number")),
                 },
-                Value::Null => Err(required(path)),
-                other => Err(expected(path, T::EXPECTED).with_meta("actual", node_type(other))),
+                view if view.is_null_or_missing() => Err(required(path)),
+                view => Err(expected(path, T::EXPECTED).with_meta("actual", view.kind())),
             },
             Source::Text(string) => {
                 let text = string.decode_at(input, path)?;
@@ -172,18 +172,6 @@ impl<T: Integer> Decoder<Value> for IntDecoder<T> {
         };
         let value = found.map_err(|issue| self.steps.base_issue(issue))?;
         self.steps.run(value, path)
-    }
-}
-
-/// What a JSON number is as an integer. `serde_json` holds as an `i64` or `u64` only a number
-/// written as an integer, so one it holds is read without its text.
-fn integral(n: &serde_json::Number) -> Integral {
-    if let Some(i) = n.as_i64() {
-        Integral::Value(i128::from(i))
-    } else if let Some(u) = n.as_u64() {
-        Integral::Value(i128::from(u))
-    } else {
-        read_integer(&lexeme(n))
     }
 }
 
@@ -366,17 +354,17 @@ pub fn f64() -> F64Decoder {
     }
 }
 
-impl<F: Float> Decoder<Value> for FloatDecoder<F> {
+impl<F: Float> Decoder<Json> for FloatDecoder<F> {
     type Output = F;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<F, Issues> {
-        let found = match input {
-            Value::Number(n) => match F::from_number(n) {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<F, Issues> {
+        let found = match input.view() {
+            View::Number(n) => match F::from_number(&n) {
                 Some(v) if !v.infinite() => Ok(v),
                 _ => Err(numeric_range(path, F::EXPECTED)),
             },
-            Value::Null => Err(required(path)),
-            other => Err(expected(path, F::EXPECTED).with_meta("actual", node_type(other))),
+            view if view.is_null_or_missing() => Err(required(path)),
+            view => Err(expected(path, F::EXPECTED).with_meta("actual", view.kind())),
         };
         let value = found.map_err(|issue| self.steps.base_issue(issue))?;
         self.steps.run(value, path)
@@ -516,8 +504,8 @@ mod tests {
         result.unwrap_err().into_iter().next().unwrap()
     }
 
-    fn number(text: &str) -> Value {
-        serde_json::from_str(text).unwrap()
+    fn number(text: &str) -> crate::json::Node {
+        text.parse().unwrap()
     }
 
     #[test]
@@ -599,12 +587,25 @@ mod tests {
 
     #[test]
     fn the_text_minus_zero_is_negative_zero_for_floats_and_zero_for_integers() {
-        // serde_json's parser writes `-0` back as `0`; a Value can still hold the text.
-        let minus_zero = Value::Number(serde_json::Number::from_string_unchecked("-0".into()));
+        let minus_zero = number("-0");
         assert!(f64().decode(&minus_zero).unwrap().is_sign_negative());
         assert!(f32().decode(&minus_zero).unwrap().is_sign_negative());
         assert_eq!(i32().decode(&minus_zero).unwrap(), 0);
         assert!(i64().decode(&number("-0.0")).is_err());
+    }
+
+    #[test]
+    fn a_serde_json_number_is_read_from_its_text_when_it_keeps_one() {
+        let minus_zero =
+            serde_json::Value::Number(serde_json::Number::from_string_unchecked("-0".into()));
+        assert!(f64().decode(&minus_zero).unwrap().is_sign_negative());
+        assert_eq!(i32().decode(&minus_zero).unwrap(), 0);
+        let big: serde_json::Value =
+            serde_json::from_str("123456789012345678901234567890").unwrap();
+        assert_eq!(
+            first(i64().decode(&big)).message_key(),
+            "type_mismatch.numeric_range"
+        );
     }
 
     #[test]

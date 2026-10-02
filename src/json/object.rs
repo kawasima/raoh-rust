@@ -1,10 +1,10 @@
+use super::{Json, View};
 use super::{missing, type_mismatch};
 use crate::codes;
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
 use crate::presence::Presence;
-use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashSet;
 
@@ -49,10 +49,10 @@ pub fn object<F: FieldSet>(fields: F) -> Object<F> {
 #[derive(Clone, Copy, Debug)]
 pub struct Object<F>(F);
 
-impl<F: FieldSet> Decoder<Value> for Object<F> {
+impl<F: FieldSet> Decoder<Json> for Object<F> {
     type Output = F::Output;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<F::Output, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<F::Output, Issues> {
         self.0.decode_fields(input, path)
     }
 }
@@ -87,10 +87,10 @@ pub struct Strict<F> {
     known: HashSet<String>,
 }
 
-impl<F: FieldSet> Decoder<Value> for Strict<F> {
+impl<F: FieldSet> Decoder<Json> for Strict<F> {
     type Output = F::Output;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<F::Output, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<F::Output, Issues> {
         let result = self.fields.decode_fields(input, path);
         reject_unknown(result, input, path, &self.known)
     }
@@ -132,10 +132,10 @@ pub struct StrictMembers<D> {
     known: HashSet<String>,
 }
 
-impl<D: Decoder<Value>> Decoder<Value> for StrictMembers<D> {
+impl<D: Decoder<Json>> Decoder<Json> for StrictMembers<D> {
     type Output = D::Output;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<D::Output, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<D::Output, Issues> {
         let result = self.inner.decode_at(input, path);
         reject_unknown(result, input, path, &self.known)
     }
@@ -149,26 +149,27 @@ impl<D: Decoder<Value>> Decoder<Value> for StrictMembers<D> {
 /// product.
 fn reject_unknown<T>(
     result: Result<T, Issues>,
-    input: &Value,
+    input: &Json,
     path: &Path<'_>,
     known: &HashSet<String>,
 ) -> Result<T, Issues> {
-    let Value::Object(members) = input else {
+    let View::Object(members) = input.view() else {
         return result;
     };
     let reported = match &result {
         Ok(_) => HashSet::new(),
         Err(issues) => reported_unknown(issues, path),
     };
-    let unknown: Issues = members
-        .keys()
-        .filter(|name| !known.contains(name.as_str()) && !reported.contains(name.as_str()))
-        .map(|name| {
-            Issue::at_path(&path.key(name), codes::UNKNOWN_FIELD)
-                .with_meta("field", name.clone())
-                .marked_unknown_member()
-        })
-        .collect();
+    let mut unknown = Issues::new();
+    members.each(&mut |name, _| {
+        if !known.contains(name) && !reported.contains(name) {
+            unknown.push(
+                Issue::at_path(&path.key(name), codes::UNKNOWN_FIELD)
+                    .with_meta("field", name)
+                    .marked_unknown_member(),
+            );
+        }
+    });
     match result {
         Ok(value) if unknown.is_empty() => Ok(value),
         Ok(_) => Err(unknown),
@@ -206,7 +207,7 @@ pub trait FieldSet: sealed::Sealed {
 
     /// Reads the fields from `input`, found at `path`.
     #[doc(hidden)]
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues>;
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues>;
 
     /// Adds the name of every member the fields read to `names`, and says whether that is all
     /// they read: false when one is flat and reads the whole input.
@@ -248,7 +249,7 @@ impl<O> sealed::Sealed for BoxFieldSet<O> {}
 impl<O> FieldSet for BoxFieldSet<O> {
     type Output = O;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<O, Issues> {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<O, Issues> {
         (**self).decode_fields(input, path)
     }
 
@@ -269,7 +270,7 @@ impl<F, G> sealed::Sealed for MapFields<F, G> {}
 impl<F: FieldSet, G: Fn(F::Output) -> U, U> FieldSet for MapFields<F, G> {
     type Output = U;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<U, Issues> {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<U, Issues> {
         self.fields.decode_fields(input, path).map(&self.f)
     }
 
@@ -284,7 +285,7 @@ impl<F> sealed::Sealed for Vec<F> {}
 impl<F: FieldSet> FieldSet for Vec<F> {
     type Output = Vec<F::Output>;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues> {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues> {
         let mut values = Vec::with_capacity(self.len());
         let mut issues = Issues::new();
         for fields in self {
@@ -327,17 +328,17 @@ pub struct Field<D> {
 
 impl<D> sealed::Sealed for Field<D> {}
 
-impl<D: Decoder<Value>> FieldSet for Field<D> {
+impl<D: Decoder<Json>> FieldSet for Field<D> {
     type Output = D::Output;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<D::Output, Issues> {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<D::Output, Issues> {
         let at = path.key(&self.name);
-        match input {
-            Value::Object(members) => {
-                let member = members.get(self.name.as_ref()).unwrap_or(missing());
+        match input.view() {
+            View::Object(members) => {
+                let member = members.get(&self.name).unwrap_or(missing());
                 self.decoder.decode_at(member, &at)
             }
-            other => Err(type_mismatch(&at, "object", other).into()),
+            _ => Err(type_mismatch(&at, "object", input).into()),
         }
     }
 
@@ -368,15 +369,15 @@ pub struct OptionalField<D> {
 
 impl<D> sealed::Sealed for OptionalField<D> {}
 
-impl<D: Decoder<Value>> FieldSet for OptionalField<D> {
+impl<D: Decoder<Json>> FieldSet for OptionalField<D> {
     type Output = Option<D::Output>;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues> {
-        let Value::Object(members) = input else {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues> {
+        let View::Object(members) = input.view() else {
             return Ok(None);
         };
         members
-            .get(self.name.as_ref())
+            .get(&self.name)
             .map(|member| self.decoder.decode_at(member, &path.key(&self.name)))
             .transpose()
     }
@@ -406,16 +407,16 @@ pub struct PresenceField<D> {
 
 impl<D> sealed::Sealed for PresenceField<D> {}
 
-impl<D: Decoder<Value>> FieldSet for PresenceField<D> {
+impl<D: Decoder<Json>> FieldSet for PresenceField<D> {
     type Output = Presence<D::Output>;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues> {
-        let Value::Object(members) = input else {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues> {
+        let View::Object(members) = input.view() else {
             return Ok(Presence::Absent);
         };
-        match members.get(self.name.as_ref()) {
+        match members.get(&self.name) {
             None => Ok(Presence::Absent),
-            Some(Value::Null) => Ok(Presence::Null),
+            Some(member) if matches!(member.view(), View::Null) => Ok(Presence::Null),
             Some(member) => self
                 .decoder
                 .decode_at(member, &path.key(&self.name))
@@ -453,10 +454,10 @@ pub struct Flat<D>(D);
 
 impl<D> sealed::Sealed for Flat<D> {}
 
-impl<D: Decoder<Value>> FieldSet for Flat<D> {
+impl<D: Decoder<Json>> FieldSet for Flat<D> {
     type Output = D::Output;
 
-    fn decode_fields(&self, input: &Value, path: &Path<'_>) -> Result<D::Output, Issues> {
+    fn decode_fields(&self, input: &Json, path: &Path<'_>) -> Result<D::Output, Issues> {
         self.0.decode_at(input, path)
     }
 
@@ -475,7 +476,7 @@ macro_rules! tuple_field_set {
 
             fn decode_fields(
                 &self,
-                input: &Value,
+                input: &Json,
                 path: &Path<'_>,
             ) -> Result<Self::Output, Issues> {
                 let mut issues = Issues::new();
@@ -510,6 +511,7 @@ mod tests {
     use super::*;
     use crate::MetaValue;
     use crate::json::{JsonDecoderExt, i64, string};
+    use serde_json::Value;
     use serde_json::json;
 
     fn paths(issues: &Issues) -> Vec<String> {

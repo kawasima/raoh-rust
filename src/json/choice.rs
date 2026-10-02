@@ -1,10 +1,10 @@
 use super::string::{StringDecoder, string};
+use super::{Json, View};
 use super::{missing, type_mismatch};
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
 use crate::{codes, message_keys};
-use serde_json::Value;
 use std::borrow::Cow;
 
 /// A decoder of a string naming one of `variants`, matched without regard to ASCII case.
@@ -62,7 +62,7 @@ pub struct EnumOf<T, S> {
 impl<T, S> EnumOf<T, S> {
     /// This decoder reading the string with `string`, such as `string().trim()`, rather than with
     /// [`string()`].
-    pub fn using<U: Decoder<Value, Output = String>>(self, string: U) -> EnumOf<T, U> {
+    pub fn using<U: Decoder<Json, Output = String>>(self, string: U) -> EnumOf<T, U> {
         EnumOf {
             variants: self.variants,
             allowed: self.allowed,
@@ -79,10 +79,10 @@ impl<T, S> EnumOf<T, S> {
     }
 }
 
-impl<T: Clone, S: Decoder<Value, Output = String>> Decoder<Value> for EnumOf<T, S> {
+impl<T: Clone, S: Decoder<Json, Output = String>> Decoder<Json> for EnumOf<T, S> {
     type Output = T;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<T, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<T, Issues> {
         let name = self.string.decode_at(input, path)?.to_ascii_lowercase();
         self.variants
             .iter()
@@ -134,7 +134,7 @@ pub struct Literal<S> {
 
 impl<S> Literal<S> {
     /// This decoder reading the string with `string` rather than with [`string()`].
-    pub fn using<U: Decoder<Value, Output = String>>(self, string: U) -> Literal<U> {
+    pub fn using<U: Decoder<Json, Output = String>>(self, string: U) -> Literal<U> {
         Literal {
             expected: self.expected,
             string,
@@ -150,10 +150,10 @@ impl<S> Literal<S> {
     }
 }
 
-impl<S: Decoder<Value, Output = String>> Decoder<Value> for Literal<S> {
+impl<S: Decoder<Json, Output = String>> Decoder<Json> for Literal<S> {
     type Output = String;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<String, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<String, Issues> {
         let found = self.string.decode_at(input, path)?;
         if found == self.expected {
             Ok(found)
@@ -237,17 +237,17 @@ fn not_allowed(path: &Path<'_>, tag_field: &str, allowed: &[String]) -> Issues {
         .into()
 }
 
-impl<V: Variants> Decoder<Value> for Discriminate<V> {
+impl<V: Variants> Decoder<Json> for Discriminate<V> {
     type Output = V::Output;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<V::Output, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<V::Output, Issues> {
         let at = path.key(&self.tag_field);
-        let tag = match input {
-            Value::Object(members) => {
-                let member = members.get(self.tag_field.as_ref()).unwrap_or(missing());
+        let tag = match input.view() {
+            View::Object(members) => {
+                let member = members.get(&self.tag_field).unwrap_or(missing());
                 string().decode_at(member, &at)?
             }
-            other => return Err(type_mismatch(&at, "object", other).into()),
+            _ => return Err(type_mismatch(&at, "object", input).into()),
         };
         self.variants
             .decode_variant(&tag, input, path)
@@ -299,10 +299,10 @@ pub struct DiscriminateBy<T, V> {
     allowed: Vec<String>,
 }
 
-impl<T: Decoder<Value, Output = String>, V: Variants> Decoder<Value> for DiscriminateBy<T, V> {
+impl<T: Decoder<Json, Output = String>, V: Variants> Decoder<Json> for DiscriminateBy<T, V> {
     type Output = V::Output;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<V::Output, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<V::Output, Issues> {
         let tag = self.tag.decode_at(input, path)?;
         self.variants
             .decode_variant(&tag, input, path)
@@ -344,14 +344,14 @@ pub trait Variants: sealed::Sealed {
     fn decode_variant(
         &self,
         tag: &str,
-        input: &Value,
+        input: &Json,
         path: &Path<'_>,
     ) -> Option<Result<Self::Output, Issues>>;
 }
 
 impl<D> sealed::Sealed for Vec<Variant<D>> {}
 
-impl<D: Decoder<Value>> Variants for Vec<Variant<D>> {
+impl<D: Decoder<Json>> Variants for Vec<Variant<D>> {
     type Output = D::Output;
 
     fn tags(&self) -> Vec<&str> {
@@ -361,7 +361,7 @@ impl<D: Decoder<Value>> Variants for Vec<Variant<D>> {
     fn decode_variant(
         &self,
         tag: &str,
-        input: &Value,
+        input: &Json,
         path: &Path<'_>,
     ) -> Option<Result<Self::Output, Issues>> {
         self.iter()
@@ -374,7 +374,7 @@ macro_rules! variants {
     ($First:ident $_first:ident $first:tt $(, $T:ident $_v:ident $idx:tt)*) => {
         impl<$First, $($T),*> sealed::Sealed for (Variant<$First>, $(Variant<$T>,)*) {}
 
-        impl<$First: Decoder<Value>, $($T: Decoder<Value, Output = $First::Output>),*> Variants
+        impl<$First: Decoder<Json>, $($T: Decoder<Json, Output = $First::Output>),*> Variants
             for (Variant<$First>, $(Variant<$T>,)*)
         {
             type Output = $First::Output;
@@ -386,7 +386,7 @@ macro_rules! variants {
             fn decode_variant(
                 &self,
                 tag: &str,
-                input: &Value,
+                input: &Json,
                 path: &Path<'_>,
             ) -> Option<Result<Self::Output, Issues>> {
                 if self.$first.tag == tag {
@@ -412,7 +412,7 @@ mod tests {
     use crate::json::{field, i64, object};
     use serde_json::json;
 
-    fn shape() -> impl Decoder<Value, Output = i64> {
+    fn shape() -> impl Decoder<Json, Output = i64> {
         discriminate(
             "kind",
             (

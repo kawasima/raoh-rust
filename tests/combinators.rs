@@ -122,7 +122,7 @@ struct Node {
     children: Vec<Node>,
 }
 
-fn node() -> BoxDecoder<Value, Node> {
+fn node() -> BoxDecoder<Json, Node> {
     object((field("children", lazy(node).list()),))
         .map(|(children,)| Node { children })
         .boxed()
@@ -148,7 +148,7 @@ fn lazy_decodes_input_as_deep_as_serde_json_reads() {
 
 #[test]
 fn a_boxed_decoder_is_shared_across_threads() {
-    let decoder: std::sync::Arc<BoxDecoder<Value, i64>> = std::sync::Arc::new(i64().boxed());
+    let decoder: std::sync::Arc<BoxDecoder<Json, i64>> = std::sync::Arc::new(i64().boxed());
     let handles: Vec<_> = (0..4)
         .map(|n| {
             let decoder = std::sync::Arc::clone(&decoder);

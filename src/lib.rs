@@ -5,7 +5,7 @@
 //! back as [`Issues`], every one of them with the [JSON Pointer](Pointer) of where it was found,
 //! rather than the first.
 //!
-//! Serde reads JSON text into a [`serde_json::Value`]; Raoh reads that value into the domain.
+//! Raoh reads JSON text, with [`json::from_str`], or a [`serde_json::Value`], into the domain.
 //!
 //! ```
 //! use raoh::json::prelude::*;
@@ -15,11 +15,11 @@
 //! #[derive(Debug)]
 //! struct User { email: Email, age: u32 }
 //!
-//! fn email() -> impl Decoder<Value, Output = Email> {
+//! fn email() -> impl Decoder<Json, Output = Email> {
 //!     string().trim().lowercase().email().map(Email)
 //! }
 //!
-//! fn user() -> impl Decoder<Value, Output = User> {
+//! fn user() -> impl Decoder<Json, Output = User> {
 //!     object((
 //!         field("email", email()),
 //!         field("age", u32().range(0..=150)),
@@ -43,8 +43,7 @@
 //! the issues each reports, their paths, metadata and messages, and the value model, in which a
 //! decimal keeps its scale, a float has two zeros and one NaN, and an offset date-time keeps its
 //! offset. The decoders read the specification's input model, a JSON value whose numbers keep the
-//! text they were written with, when `serde_json` keeps that text: see [`json`] on its
-//! `arbitrary_precision` feature.
+//! text they were written with: see [`json`].
 
 #![warn(missing_docs)]
 

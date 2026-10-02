@@ -1,11 +1,11 @@
 use super::ext::{max_size_issue, min_size_issue, non_empty_issue, size_issue};
 use super::steps::Steps;
 use super::unexpected;
+use super::{Json, View};
 use crate::decoder::Decoder;
 use crate::issue::Issues;
 use crate::path::Path;
 use indexmap::IndexMap;
-use serde_json::Value;
 
 /// A decoder of a JSON object used as a map, whose every member `value` reads.
 ///
@@ -13,8 +13,9 @@ use serde_json::Value;
 /// are reported, each under its key. Constraints on the size of the map run once every member has
 /// decoded, in the order they are written, and the first to fail is the one reported.
 ///
-/// The map keeps the members in the order the [`Value`] keeps its keys: the order of the input
-/// with `serde_json`'s `preserve_order` feature, and sorted without it.
+/// The map keeps the members in the order of the input: that of the text for a
+/// [`Node`](super::Node), and for a [`serde_json::Value`] the order it keeps its keys in, which is
+/// that of the text with `serde_json`'s `preserve_order` feature and sorted without it.
 ///
 /// ```
 /// use raoh::json::prelude::*;
@@ -22,7 +23,7 @@ use serde_json::Value;
 /// let stock = dict(u32()).non_empty().decode(&json!({"apple": 3, "pear": 0})).unwrap();
 /// assert_eq!(stock["apple"], 3);
 /// ```
-pub fn dict<D: Decoder<Value>>(value: D) -> Dict<D> {
+pub fn dict<D: Decoder<Json>>(value: D) -> Dict<D> {
     Dict {
         value,
         steps: Steps::default(),
@@ -30,12 +31,12 @@ pub fn dict<D: Decoder<Value>>(value: D) -> Dict<D> {
 }
 
 /// The decoder [`dict`] returns.
-pub struct Dict<D: Decoder<Value>> {
+pub struct Dict<D: Decoder<Json>> {
     value: D,
     steps: Steps<IndexMap<String, D::Output>>,
 }
 
-impl<D: Decoder<Value> + Clone> Clone for Dict<D> {
+impl<D: Decoder<Json> + Clone> Clone for Dict<D> {
     fn clone(&self) -> Self {
         Self {
             value: self.value.clone(),
@@ -44,7 +45,7 @@ impl<D: Decoder<Value> + Clone> Clone for Dict<D> {
     }
 }
 
-impl<D: Decoder<Value> + std::fmt::Debug> std::fmt::Debug for Dict<D> {
+impl<D: Decoder<Json> + std::fmt::Debug> std::fmt::Debug for Dict<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Dict")
             .field("value", &self.value)
@@ -53,23 +54,23 @@ impl<D: Decoder<Value> + std::fmt::Debug> std::fmt::Debug for Dict<D> {
     }
 }
 
-impl<D: Decoder<Value>> Decoder<Value> for Dict<D> {
+impl<D: Decoder<Json>> Decoder<Json> for Dict<D> {
     type Output = IndexMap<String, D::Output>;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues> {
-        let Value::Object(members) = input else {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues> {
+        let View::Object(members) = input.view() else {
             return Err(self.steps.base_issue(unexpected(path, "object", input)));
         };
         let mut values = IndexMap::with_capacity(members.len());
         let mut issues = Issues::new();
-        for (key, member) in members {
-            match self.value.decode_at(member, &path.key(key)) {
+        members.each(
+            &mut |key, member| match self.value.decode_at(member, &path.key(key)) {
                 Ok(value) => {
-                    values.insert(key.clone(), value);
+                    values.insert(key.to_owned(), value);
                 }
                 Err(found) => issues.merge(found),
-            }
-        }
+            },
+        );
         if !issues.is_empty() {
             return Err(issues);
         }
@@ -77,7 +78,7 @@ impl<D: Decoder<Value>> Decoder<Value> for Dict<D> {
     }
 }
 
-impl<D: Decoder<Value>> Dict<D>
+impl<D: Decoder<Json>> Dict<D>
 where
     D::Output: 'static,
 {
@@ -127,6 +128,7 @@ where
 mod tests {
     use super::*;
     use crate::json::i64;
+    use serde_json::Value;
     use serde_json::json;
 
     #[test]

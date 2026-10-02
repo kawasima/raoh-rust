@@ -7,6 +7,8 @@
 //! every member for each member does, about sixty-four times. The bound is set between the two, so
 //! that the tests tell the kinds apart without depending on how fast the machine is.
 
+use raoh::json::BoxFieldSet;
+use raoh::json::FieldSet;
 use raoh::json::prelude::*;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -57,6 +59,32 @@ fn reading_a_number_allocates_nothing() {
         f64().list().decode(&doubles).unwrap();
     });
     assert!(n <= 20, "{n} allocations for 1000 doubles");
+}
+
+#[test]
+fn reading_numbers_from_text_allocates_nothing_for_each() {
+    // A lexeme is held inside its node; only the vectors of the array and the list grow.
+    for text in [
+        format!(
+            "[{}]",
+            (0..1000)
+                .map(|i| format!("{i}.25"))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        format!(
+            "[{}]",
+            (0..1000)
+                .map(|i| format!("-{i}e-3"))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+    ] {
+        let n = allocations(|| {
+            from_str(&f64().list(), &text).unwrap();
+        });
+        assert!(n <= 40, "{n} allocations for 1000 doubles read from text");
+    }
 }
 
 #[test]
@@ -122,6 +150,32 @@ fn strict_decoders_take_time_in_the_members() {
         },
         |(decoder, input)| {
             let _ = decoder.decode(input);
+        },
+    );
+}
+
+#[test]
+fn objects_read_from_text_take_time_in_their_members() {
+    let text = |n: usize| {
+        let members: Vec<String> = (0..n).map(|i| format!("\"m{i}\":{i}")).collect();
+        format!("{{{}}}", members.join(","))
+    };
+    // A name written twice is looked for among all the others.
+    grows_with_the_input("reading", 2000, text, |text| {
+        text.parse::<Node>().unwrap();
+    });
+    // Each field finds its member among all of them.
+    grows_with_the_input(
+        "finding",
+        2000,
+        |n| {
+            let fields: Vec<BoxFieldSet<Option<i64>>> = (0..n)
+                .map(|i| optional_field(format!("m{i}"), i64()).boxed())
+                .collect();
+            (object(fields), text(n).parse::<Node>().unwrap())
+        },
+        |(decoder, node)| {
+            decoder.decode(node).unwrap();
         },
     );
 }

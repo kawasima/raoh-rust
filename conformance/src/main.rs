@@ -188,7 +188,12 @@ fn panic_text(payload: Box<dyn std::any::Any + Send>) -> String {
 
 /// Runs a case whose features are all bound, and answers what it observed; `None` where the case
 /// needs a feature the runner does not bind.
-fn run_case(case: &Value, catalog: &Catalog, bound: &BTreeSet<String>) -> Option<Value> {
+fn run_case(
+    case: &Value,
+    input: &raoh::json::Node,
+    catalog: &Catalog,
+    bound: &BTreeSet<String>,
+) -> Option<Value> {
     let mut binder = Binder::new(catalog);
     let outcome = catch_unwind(AssertUnwindSafe(|| -> Result<Value, String> {
         if let Some(encoder) = case.get("encoder") {
@@ -196,7 +201,7 @@ fn run_case(case: &Value, catalog: &Catalog, bound: &BTreeSet<String>) -> Option
             return Ok(json!({ "ok": ok }));
         }
         let (decoder, ty) = binder.decoder(&case["decoder"])?;
-        Ok(match decoder.decode(&case["input"]) {
+        Ok(match decoder.decode(input) {
             Ok(v) => json!({ "ok": value::observe(&ty, &v)? }),
             Err(issues) => json!({ "issues": value::write_issues(&issues) }),
         })
@@ -257,9 +262,9 @@ fn run(args: Args) -> Result<(), String> {
             let text =
                 std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
             let cases = json::parse(&text).map_err(|e| format!("{}: {e}", file.display()))?;
-            for case in cases.as_array().ok_or("a suite file is an array")? {
+            for json::Case { case, input } in &cases {
                 let id = case["id"].as_str().ok_or("a case has no id")?;
-                if let Some(observed) = run_case(case, &catalog, &bound) {
+                if let Some(observed) = run_case(case, input, &catalog, &bound) {
                     results.insert(id.to_owned(), json!({ "observed": observed }));
                 }
             }

@@ -10,13 +10,14 @@ It is built around a parse-don't-validate approach:
 - return failures as values instead of panicking
 - attach structured errors to precise paths
 
-Serde already turns JSON text into a `serde_json::Value`. raoh turns that `Value` into domain
-values, and when the input is wrong it reports every problem it found, each with the JSON Pointer
-of where it was, instead of stopping at the first one.
+raoh reads JSON text, or a `serde_json::Value` an application already has, into domain values,
+and when the input is wrong it reports every problem it found, each with the JSON Pointer of where
+it was, instead of stopping at the first one.
 
 ```text
-JSON text --serde_json--> serde_json::Value --raoh--> domain values
-                                               \--> Issues (path, code, message, meta)
+JSON text ---raoh::json::from_str---> Node ---\
+serde_json::Value ------------------------------+--raoh--> domain values
+                                                     \--> Issues (path, code, message, meta)
 ```
 
 A domain type does not derive `Deserialize` and its fields stay private. The only way to get a
@@ -33,16 +34,11 @@ Optional features:
 
 | Feature               | What it does                                                          |
 |-----------------------|-----------------------------------------------------------------------|
-| `arbitrary_precision` | Turns on `serde_json`'s feature of that name, so that a number keeps the text it was written with (see [Numbers](#numbers)) |
-| `preserve_order`      | Turns on `serde_json`'s feature of that name, so that an object keeps its members in the order written |
+| `arbitrary_precision` | Turns on `serde_json`'s feature of that name, so that a `serde_json::Value`'s number keeps the text it was written with (see [Input](#input)) |
+| `preserve_order`      | Turns on `serde_json`'s feature of that name, so that a `serde_json::Value`'s object keeps its members in the order written |
 
-An application that decodes decimals should enable `arbitrary_precision`: without it `1.50` is
-read as `1.5` and the scale is lost before a decoder sees it. It is also what tells `-0.0` from
-`0`, reads an integer past `u64` as one, and rounds a number to `f32` once. It has a cost:
-`serde_json` then keeps every number of the input as a `String` of its own, which made reading an
-array of 1000 numbers 3.5 to 4.6 times slower, 15 µs to 54 µs for doubles, whether or not they
-are decoded. An application whose input has no decimal, and that does not need those, can leave it
-off: `int` still refuses `1.0` and `1e2`, which `serde_json` reads as floats.
+Both matter only to an application that decodes a `serde_json::Value`. Text read with
+`raoh::json::from_str` keeps every number's text and every object's order without them.
 
 The minimum supported Rust version is 1.88.
 
@@ -63,15 +59,15 @@ pub struct User {
     age: Age,
 }
 
-fn email() -> impl Decoder<Value, Output = Email> {
+fn email() -> impl Decoder<Json, Output = Email> {
     string().trim().lowercase().email().map(Email)
 }
 
-fn age() -> impl Decoder<Value, Output = Age> {
+fn age() -> impl Decoder<Json, Output = Age> {
     u32().range(0..=150).map(Age)
 }
 
-fn user() -> impl Decoder<Value, Output = User> {
+fn user() -> impl Decoder<Json, Output = User> {
     object((
         field("email", email()),
         field("age", age()),
@@ -108,9 +104,9 @@ pub trait Decoder<I: ?Sized> {
 
 A decoder is a value that describes how to read an input. It holds no state and can be reused.
 Decoders compose like iterator adapters, and the composed type is hidden behind
-`impl Decoder<Value, Output = T>`. Where a type has to be named, such as a recursive decoder or a
+`impl Decoder<Json, Output = T>`. Where a type has to be named, such as a recursive decoder or a
 decoder kept in a struct field or a `static`, `.boxed()` turns it into a
-`BoxDecoder<Value, T>`, which is `Send + Sync`.
+`BoxDecoder<Json, T>`, which is `Send + Sync`.
 
 The walk down the input uses a `Path` borrowed from the stack, so a successful decode allocates
 nothing for paths. A path is copied out into a `Pointer` only when an issue is recorded.
@@ -329,7 +325,7 @@ pub enum Contact {
     Phone(String),
 }
 
-fn contact() -> impl Decoder<Value, Output = Contact> {
+fn contact() -> impl Decoder<Json, Output = Contact> {
     discriminate(
         "type",
         (
@@ -366,7 +362,7 @@ pub struct Category {
     children: Vec<Category>,
 }
 
-fn category() -> BoxDecoder<Value, Category> {
+fn category() -> BoxDecoder<Json, Category> {
     object((
         field("name", string().non_blank()),
         field("children", lazy(category).list()),
@@ -413,17 +409,35 @@ by member, with `property(name, getter, encoder)` and `property_with_default(nam
 encoder, default)`, whose getter gives an `Option` and whose default is written for `None`. Any
 `Fn(&T) -> Value` is an encoder too.
 
+## Input
+
+Every decoder reads a `Json`, which is `dyn raoh::json::Input`: a value of the specification's
+input model, in which a number keeps the text it was written with. Two types are one.
+
+`raoh::json::Node` is what `raoh::json::from_str` reads JSON text into, and what `str::parse`
+gives. Every number keeps its text, held inside the node when it is up to 22 bytes long, which
+almost every number is, so reading a number allocates nothing. Every object keeps its members in
+the order written. A name written twice in one object, and arrays and objects nested more than
+128 deep, are `invalid_format`, as is text that is not JSON.
+
+`serde_json::Value` is one too, for an application that already has one, from a web framework
+for instance. Its numbers keep their text only with `serde_json`'s `arbitrary_precision` feature,
+which this crate's feature of the same name turns on, and then `serde_json` holds every number as
+a `String` of its own. Without it a number is the `i64`, `u64` or `f64` that `serde_json` read,
+and a decoder reads the text that value is written as: `1.50` as `1.5`, `-0` as `-0.0`. Even with
+the feature, `serde_json`'s parser reads an integer as an `i64` or `u64` first, so the text `-0`
+becomes `0`.
+
 ## Numbers
 
-A decoder reads a number from the text it was written with, as the specification's input model
-has it: `int` takes `1` and refuses `1.0` and `1e2`, `decimal` reads `1.50` with scale 2, and
-`double` reads `-0.0` as -0. `serde_json` keeps that text only with its `arbitrary_precision`
-feature, which this crate's feature of the same name turns on. Without it a number is the `i64`,
-`u64` or `f64` that `serde_json` read, and a decoder reads the text that value is written as.
+A decoder reads a number from its text, as the input model has it: `int` takes `1` and refuses
+`1.0` and `1e2`, `decimal` reads `1.50` with scale 2, `double` reads `-0` and `-0.0` as -0, and
+`float` rounds the text to `f32` once.
 
-Even with the feature, `serde_json`'s parser reads an integer as an `i64` or `u64` first, so the
-text `-0` becomes `0` and `double` and `float` read it as +0. A `serde_json::Value` can hold the
-text `-0`, and a decoder given one reads -0; only the parser loses the sign.
+Reading JSON text with `from_str` takes about as long as `serde_json::from_str` without
+`arbitrary_precision`, which loses that text, and less than half as long as with it. On an array
+of 1000 doubles, reading and decoding took 35 µs with `from_str`, 29 µs with `serde_json` and the
+feature off, and 91 µs with it on.
 
 ## The Raoh Specification
 
@@ -436,8 +450,8 @@ gave with what each case expects. At the pinned revision:
 Raoh Specification 0.9.0-dev — core: conformant; encode: conformant; messages-en: conformant;
 messages-ja: conformant.
 
-The runner gives each case's input to the decoder as a `Value` holding every number's text, which
-it reads with a JSON reader of its own for the reason under [Numbers](#numbers).
+The runner reads each suite file into `Node`s and gives each case's input to the decoder as the
+node it is.
 
 The specification does not cover the API. Where this crate's API differs from Raoh for Java's:
 

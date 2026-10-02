@@ -8,9 +8,10 @@ against every case of its suite: core, encode, messages-en and messages-ja are c
 
 What each decoder accepts and reports:
 
-- A number is read from the text it was written with, which `serde_json` keeps with the new
-  `arbitrary_precision` feature: `int` refuses `1.0`, `decimal` keeps the scale of `1.50`, and an
-  integer of any length is told from a float.
+- A number is read from the text it was written with: `int` refuses `1.0`, `decimal` keeps the
+  scale of `1.50`, `double` reads `-0` as -0, and an integer of any length is told from a float.
+  `from_str` keeps that text; a `serde_json::Value` keeps it with the new `arbitrary_precision`
+  feature.
 - Each field of an `object` checks for itself that the input is an object: a required field of
   anything else, `null` and a missing member included, is `type_mismatch` with `expected` `object`
   at its own path, and an optional field reads it as not having the member. `object` reported one
@@ -34,6 +35,10 @@ What each decoder accepts and reports:
 
 New:
 
+- Decoders read a `Json`, which is `dyn raoh::json::Input`, a value of the specification's input
+  model. `raoh::json::Node` is one, and `from_str` reads JSON text into it with raoh's own reader:
+  every number keeps its text inside the node, and every object its members in the order written.
+  A `serde_json::Value` is one too.
 - `f32()`, `uri()`, `normalize`, `to_int`, `to_long`, `to_decimal`, `to_bool`, and the temporal
   conversions `instant`, `date`, `time`, `date_time` and `offset_date_time` with `before`, `after`
   and `between`.
@@ -57,6 +62,8 @@ New:
 
 Cost:
 
+- Reading JSON text with `from_str` allocates nothing for a number, and reading and decoding 1000
+  doubles takes 35 µs, where `serde_json` with `arbitrary_precision` took 91 µs.
 - Reading a number allocates nothing, and lower-casing, upper-casing and normalizing ASCII text
   do not look its characters up in Unicode's tables.
 - `pattern` keeps a matcher for each thread that decodes with it at once, with what its matches
@@ -67,6 +74,11 @@ Cost:
 
 Breaking:
 
+- A decoder is a `Decoder<Json>` rather than a `Decoder<serde_json::Value>`: write
+  `impl Decoder<Json, Output = T>`. Decoding a `serde_json::Value` is written as before.
+  `missing()` gives a `&'static Json`, and `is_missing` takes one.
+- `from_str` reports a name written twice in one object, and arrays and objects nested more than
+  128 deep, as `invalid_format`; its `column` counts characters from 1.
 - An issue's `meta` holds `MetaValue`s instead of `serde_json::Value`s.
 - The features `regex`, `decimal`, `uuid` and `url` are removed; what they gave is always there.
 - The MSRV is 1.88.

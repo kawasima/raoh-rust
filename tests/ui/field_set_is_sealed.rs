@@ -7,7 +7,7 @@ struct Anything;
 impl FieldSet for Anything {
     type Output = ();
 
-    fn decode_fields(&self, _: &Value, _: &Path<'_>) -> Result<(), Issues> {
+    fn decode_fields(&self, _: &Json, _: &Path<'_>) -> Result<(), Issues> {
         Ok(())
     }
 

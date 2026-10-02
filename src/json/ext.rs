@@ -1,5 +1,6 @@
 use super::steps::Steps;
-use super::{is_missing, unexpected};
+use super::unexpected;
+use super::{Json, View};
 use crate::combinator::Map;
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
@@ -7,11 +8,10 @@ use crate::meta::MetaValue;
 use crate::path::Path;
 use crate::value::same::{ByValue, Same, Set};
 use crate::{codes, message_keys};
-use serde_json::Value;
 use std::collections::HashSet;
 
 /// What every decoder over a JSON value can also do.
-pub trait JsonDecoderExt: Decoder<Value> + Sized {
+pub trait JsonDecoderExt: Decoder<Json> + Sized {
     /// A decoder that gives `None` for `null` and `Some` of this decoder's output otherwise.
     ///
     /// A missing member is not `null`: it is still handed to this decoder, which reports it as
@@ -33,17 +33,17 @@ pub trait JsonDecoderExt: Decoder<Value> + Sized {
     }
 }
 
-impl<D: Decoder<Value>> JsonDecoderExt for D {}
+impl<D: Decoder<Json>> JsonDecoderExt for D {}
 
 /// The decoder [`JsonDecoderExt::nullable`] returns.
 #[derive(Clone, Copy, Debug)]
 pub struct Nullable<D>(D);
 
-impl<D: Decoder<Value>> Decoder<Value> for Nullable<D> {
+impl<D: Decoder<Json>> Decoder<Json> for Nullable<D> {
     type Output = Option<D::Output>;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues> {
-        if input.is_null() && !is_missing(input) {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues> {
+        if matches!(input.view(), View::Null) {
             Ok(None)
         } else {
             self.0.decode_at(input, path).map(Some)
@@ -58,12 +58,12 @@ impl<D: Decoder<Value>> Decoder<Value> for Nullable<D> {
 /// `contains` and `contains_all`, compare them as the value model of the Raoh Specification
 /// does, through [`MetaValue`]: for floats +0 and -0 differ and NaN is NaN, and decimals of
 /// different scales differ.
-pub struct ListDecoder<D: Decoder<Value>> {
+pub struct ListDecoder<D: Decoder<Json>> {
     element: D,
     steps: Steps<Vec<D::Output>>,
 }
 
-impl<D: Decoder<Value> + Clone> Clone for ListDecoder<D> {
+impl<D: Decoder<Json> + Clone> Clone for ListDecoder<D> {
     fn clone(&self) -> Self {
         Self {
             element: self.element.clone(),
@@ -72,7 +72,7 @@ impl<D: Decoder<Value> + Clone> Clone for ListDecoder<D> {
     }
 }
 
-impl<D: Decoder<Value> + std::fmt::Debug> std::fmt::Debug for ListDecoder<D> {
+impl<D: Decoder<Json> + std::fmt::Debug> std::fmt::Debug for ListDecoder<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ListDecoder")
             .field("element", &self.element)
@@ -81,11 +81,11 @@ impl<D: Decoder<Value> + std::fmt::Debug> std::fmt::Debug for ListDecoder<D> {
     }
 }
 
-impl<D: Decoder<Value>> Decoder<Value> for ListDecoder<D> {
+impl<D: Decoder<Json>> Decoder<Json> for ListDecoder<D> {
     type Output = Vec<D::Output>;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<Self::Output, Issues> {
-        let Value::Array(items) = input else {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<Self::Output, Issues> {
+        let View::Array(items) = input.view() else {
             return Err(self.steps.base_issue(unexpected(path, "array", input)));
         };
         let mut values = Vec::with_capacity(items.len());
@@ -103,7 +103,7 @@ impl<D: Decoder<Value>> Decoder<Value> for ListDecoder<D> {
     }
 }
 
-impl<D: Decoder<Value>> ListDecoder<D>
+impl<D: Decoder<Json>> ListDecoder<D>
 where
     D::Output: 'static,
 {
@@ -225,8 +225,7 @@ where
     /// ```
     /// use raoh::json::prelude::*;
     ///
-    /// let input: Value = serde_json::from_str("[0.0, -0.0, 0.0]").unwrap();
-    /// assert_eq!(f64().list().to_set().decode(&input).unwrap().len(), 2);
+    /// assert_eq!(from_str(&f64().list().to_set(), "[0.0, -0, 0]").unwrap().len(), 2);
     /// ```
     pub fn to_set(self) -> ToSet<D>
     where
@@ -239,7 +238,7 @@ where
 /// The decoder [`ListDecoder::to_set`] returns.
 pub type ToSet<D> = Map<ListDecoder<D>, fn(Vec<Element<D>>) -> Set<Element<D>>>;
 
-type Element<D> = <D as Decoder<Value>>::Output;
+type Element<D> = <D as Decoder<Json>>::Output;
 
 fn collect_set<T: Same>(items: Vec<T>) -> Set<T> {
     items.into_iter().collect()
@@ -274,6 +273,7 @@ pub(crate) fn size_issue(expected: usize, actual: usize) -> Issue {
 mod tests {
     use super::*;
     use crate::json::{f64, i64, missing, string};
+    use serde_json::Value;
     use serde_json::json;
 
     fn first<T: std::fmt::Debug>(result: Result<T, Issues>) -> Issue {

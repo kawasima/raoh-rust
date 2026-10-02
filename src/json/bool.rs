@@ -2,11 +2,11 @@ use super::steps::Steps;
 use super::string::StringDecoder;
 use super::text::{Source, read_bool};
 use super::unexpected;
+use super::{Json, View};
 use crate::codes;
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
-use serde_json::Value;
 
 /// A decoder of a boolean: a JSON boolean, or with [`StringDecoder::to_bool`], a string.
 ///
@@ -36,14 +36,14 @@ impl BoolDecoder {
     }
 }
 
-impl Decoder<Value> for BoolDecoder {
+impl Decoder<Json> for BoolDecoder {
     type Output = bool;
 
-    fn decode_at(&self, input: &Value, path: &Path<'_>) -> Result<bool, Issues> {
+    fn decode_at(&self, input: &Json, path: &Path<'_>) -> Result<bool, Issues> {
         let found = match &self.source {
-            Source::Json => match input {
-                Value::Bool(b) => Ok(*b),
-                other => Err(unexpected(path, "boolean", other)),
+            Source::Json => match input.view() {
+                View::Bool(b) => Ok(b),
+                _ => Err(unexpected(path, "boolean", input)),
             },
             Source::Text(string) => {
                 let text = string.decode_at(input, path)?;

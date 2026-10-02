@@ -12,7 +12,7 @@ use crate::path::Path;
 ///
 /// struct Category { name: String, children: Vec<Category> }
 ///
-/// fn category() -> BoxDecoder<Value, Category> {
+/// fn category() -> BoxDecoder<Json, Category> {
 ///     object((
 ///         field("name", string()),
 ///         field("children", lazy(category).list()),

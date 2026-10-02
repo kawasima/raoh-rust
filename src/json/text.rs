@@ -31,6 +31,14 @@ pub(crate) fn read_integer(text: &str) -> Integral {
     if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return Integral::Not;
     }
+    // 19 digits are below 2^64, so they add up in a u64 without a check on each.
+    if digits.len() <= 19 {
+        let magnitude = digits
+            .bytes()
+            .fold(0u64, |v, b| v * 10 + u64::from(b - b'0'));
+        let magnitude = i128::from(magnitude);
+        return Integral::Value(if negative { -magnitude } else { magnitude });
+    }
     let mut value: i128 = 0;
     for b in digits.bytes() {
         let digit = i128::from(b - b'0');
@@ -72,6 +80,14 @@ mod tests {
         assert!(matches!(read_integer("+5"), Integral::Value(5)));
         assert!(matches!(read_integer("-0"), Integral::Value(0)));
         assert!(matches!(read_integer("007"), Integral::Value(7)));
+        assert!(matches!(
+            read_integer("-9999999999999999999"),
+            Integral::Value(-9_999_999_999_999_999_999)
+        ));
+        assert!(matches!(
+            read_integer("18446744073709551616"),
+            Integral::Value(18_446_744_073_709_551_616)
+        ));
         assert!(matches!(
             read_integer("-170141183460469231731687303715884105728"),
             Integral::Value(i128::MIN)

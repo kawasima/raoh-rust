@@ -10,9 +10,9 @@ use raoh::json::prelude::*;
 use raoh::{Same, Set};
 use serde_json::json;
 
-fn set_of<D>(element: D) -> impl Decoder<Value, Output = Set<D::Output>>
+fn set_of<D>(element: D) -> impl Decoder<Json, Output = Set<D::Output>>
 where
-    D: Decoder<Value>,
+    D: Decoder<Json>,
     D::Output: Same + 'static,
 {
     element.list().to_set()
@@ -41,7 +41,7 @@ raoh::meta_by_display!(Color);
 /// metadata, apply to a list of `element`'s output.
 fn compared<D>(element: D, wanted: D::Output)
 where
-    D: Decoder<Value> + Clone + 'static,
+    D: Decoder<Json> + Clone + 'static,
     D::Output: Same + Clone + Into<raoh::MetaValue> + Send + Sync + 'static,
 {
     let _ = element.clone().list().unique();

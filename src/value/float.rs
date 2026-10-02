@@ -50,7 +50,7 @@ pub trait Float:
 
     /// The JSON number rounded to this type once, or `None` when it cannot be read.
     #[doc(hidden)]
-    fn from_number(n: &serde_json::Number) -> Option<Self>;
+    fn from_number(n: &crate::json::Number<'_>) -> Option<Self>;
 }
 
 impl Float for f32 {
@@ -81,9 +81,9 @@ impl Float for f32 {
         }
     }
 
-    /// From the number's text, so that it is rounded once, to binary32, and not first to binary64.
-    fn from_number(n: &serde_json::Number) -> Option<Self> {
-        crate::json::lexeme(n).parse().ok()
+    /// From the lexeme, so that it is rounded once, to binary32, and not first to binary64.
+    fn from_number(n: &crate::json::Number<'_>) -> Option<Self> {
+        read(&n.lexeme())
     }
 }
 
@@ -115,12 +115,98 @@ impl Float for f64 {
         }
     }
 
-    /// What `serde_json` reads: with `arbitrary_precision`, the text parsed, rounded once, and
-    /// nothing for a number beyond the range; without it, the `f64` it read, or an integer
-    /// rounded to the nearest `f64`.
-    fn from_number(n: &serde_json::Number) -> Option<Self> {
-        n.as_f64()
+    fn from_number(n: &crate::json::Number<'_>) -> Option<Self> {
+        n.f64()
     }
+}
+
+/// A float that a JSON number's digits and power of ten can be exact in.
+pub(crate) trait Exact:
+    'static
+    + FromStr
+    + Copy
+    + std::ops::Mul<Output = Self>
+    + std::ops::Div<Output = Self>
+    + std::ops::Neg<Output = Self>
+{
+    /// The largest integer every one up to which is exact.
+    const MANTISSA: u64;
+    /// The powers of ten that are exact, from 10^0.
+    const POWERS: &'static [Self];
+
+    fn from_u64(m: u64) -> Self;
+}
+
+impl Exact for f32 {
+    const MANTISSA: u64 = 1 << 24;
+    const POWERS: &'static [Self] = &[1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10];
+
+    fn from_u64(m: u64) -> Self {
+        m as f32
+    }
+}
+
+impl Exact for f64 {
+    const MANTISSA: u64 = 1 << 53;
+    const POWERS: &'static [Self] = &[
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16,
+        1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+    ];
+
+    fn from_u64(m: u64) -> Self {
+        m as f64
+    }
+}
+
+/// The JSON number written `lexeme` rounded once to `F`, or `None` when it cannot be read.
+///
+/// When the digits, read as one integer, and the power of ten they are scaled by are both exact
+/// in `F`, one multiplication or division rounds the value once, correctly (W. D. Clinger, "How
+/// to read floating point numbers accurately", 1990); [`str::parse`] reads the rest.
+pub(crate) fn read<F: Exact>(lexeme: &str) -> Option<F> {
+    exact(lexeme).or_else(|| lexeme.parse().ok())
+}
+
+fn exact<F: Exact>(lexeme: &str) -> Option<F> {
+    let bytes = lexeme.as_bytes();
+    let (negative, mut i) = match bytes.first() {
+        Some(b'-') => (true, 1),
+        _ => (false, 0),
+    };
+    let mut mantissa: u64 = 0;
+    let mut digits = 0;
+    let mut scale: i32 = 0;
+    let mut fraction = false;
+    while let Some(&b) = bytes.get(i) {
+        match b {
+            b'0'..=b'9' => {
+                digits += 1;
+                if digits > 19 {
+                    return None;
+                }
+                mantissa = mantissa * 10 + u64::from(b - b'0');
+                scale -= i32::from(fraction);
+            }
+            b'.' => fraction = true,
+            _ => break,
+        }
+        i += 1;
+    }
+    if let Some(b'e' | b'E') = bytes.get(i) {
+        let rest = &lexeme[i + 1..];
+        let exponent: i32 = rest.strip_prefix('+').unwrap_or(rest).parse().ok()?;
+        scale = scale.checked_add(exponent)?;
+    }
+    if mantissa > F::MANTISSA {
+        return None;
+    }
+    let power = *F::POWERS.get(scale.unsigned_abs() as usize)?;
+    let magnitude = if scale < 0 {
+        F::from_u64(mantissa) / power
+    } else {
+        F::from_u64(mantissa) * power
+    };
+    Some(if negative { -magnitude } else { magnitude })
 }
 
 /// The float order of the value model: -∞, the negative values, -0, +0, the positive values, +∞
@@ -214,6 +300,55 @@ pub(crate) fn float_message<F: Float>(v: F) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `read` gives what `str::parse` gives, bit for bit, for lexemes in and out of the exact
+    /// range: digits up to 20, a point anywhere, exponents up to ±40, both signs.
+    #[test]
+    fn reading_a_lexeme_rounds_as_parse_does() {
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut next = |bound: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % bound
+        };
+        for _ in 0..200_000 {
+            let digits = 1 + next(20) as usize;
+            let mut text = String::new();
+            if next(2) == 0 {
+                text.push('-');
+            }
+            let mut body: String = (0..digits)
+                .map(|_| char::from(b'0' + next(10) as u8))
+                .collect();
+            if body.len() > 1 && body.starts_with('0') {
+                body.replace_range(..1, "1");
+            }
+            text.push_str(&body);
+            if next(2) == 0 {
+                text.push('.');
+                text.extend((0..1 + next(8)).map(|_| char::from(b'0' + next(10) as u8)));
+            }
+            if next(2) == 0 {
+                text.push_str(&format!("e{}", next(81) as i64 - 40));
+            }
+            let f64_parsed: f64 = text.parse().unwrap();
+            let f32_parsed: f32 = text.parse().unwrap();
+            assert_eq!(
+                read::<f64>(&text).unwrap().to_bits(),
+                f64_parsed.to_bits(),
+                "{text}"
+            );
+            assert_eq!(
+                read::<f32>(&text).unwrap().to_bits(),
+                f32_parsed.to_bits(),
+                "{text}"
+            );
+        }
+        assert!(read::<f64>("-0").unwrap().is_sign_negative());
+        assert!(read::<f32>("-0.0e5").unwrap().is_sign_negative());
+        assert_eq!(read::<f64>("1e400"), Some(f64::INFINITY));
+    }
 
     #[test]
     fn floats_are_written_as_the_specification_writes_them() {

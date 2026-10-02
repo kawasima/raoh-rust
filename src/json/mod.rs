@@ -1,33 +1,38 @@
-//! Decoders over a [`serde_json::Value`].
+//! Decoders over JSON values.
 //!
 //! Bring everything into scope with `use raoh::json::prelude::*`.
 //!
+//! Every decoder here reads a [`Json`]: a value of the Raoh Specification's input model, which is
+//! what a JSON text denotes with every number keeping its lexeme. [`from_str`] reads JSON text into
+//! a [`Node`], which is one; a [`serde_json::Value`] is one too.
+//!
 //! A member missing from an object and a member present as `null` are told apart: a missing
-//! member is handed to its decoder as [`missing()`], a `null` that [`is_missing`] recognises. Both
-//! fail a built-in decoder with `required`, but [`nullable`](JsonDecoderExt::nullable) accepts
-//! only `null`, and [`presence_field`] reports which of the three it was.
+//! member is handed to its decoder as [`missing()`], which [`is_missing`] recognises. Both fail a
+//! built-in decoder with `required`, but [`nullable`](JsonDecoderExt::nullable) accepts only
+//! `null`, and [`presence_field`] reports which of the three it was.
 //!
 //! # Numbers
 //!
-//! A decoder reads a number from the text its [`Value`] holds, as the Raoh Specification's input
-//! model has it: `int` takes `1` and refuses `1.0`, `decimal` gives `1.50` with scale 2, and
-//! `double` gives -0 for `-0.0`. `serde_json` keeps that text only with its `arbitrary_precision`
-//! feature, which this crate's feature of the same name turns on. Without it a number is the
-//! `i64`, `u64` or `f64` `serde_json` read, and is read as the text that value is written as:
-//! `1.50` is read as `1.5`, `-0` as `-0.0`, which `int` refuses, and an integer past `u64` as a
-//! float. The results are then `serde_json`'s reading of the input, not the input's.
+//! A decoder reads a number from its lexeme, as the input model has it: `int` takes `1` and
+//! refuses `1.0`, `decimal` gives `1.50` with scale 2, and `double` gives -0 for `-0` and `-0.0`.
+//! A [`Node`] keeps every lexeme as written.
 //!
-//! Even with the feature, `serde_json`'s parser, which [`from_str`] and `serde_json::from_str`
-//! use, reads an integer as an `i64` or `u64` before keeping its text, so the text `-0` becomes
-//! `0` and `double` gives +0 for it. A `Value` can hold the text `-0`, and a decoder given such a
-//! value gives -0; it is the parser that loses the sign.
+//! A [`serde_json::Value`] keeps the lexeme only with `serde_json`'s `arbitrary_precision`
+//! feature, which this crate's feature of the same name turns on, and then holds every number as
+//! a `String` of its own. Without it a number is the `i64`, `u64` or `f64` `serde_json` read, and
+//! is read as the text that value is written as: `1.50` is read as `1.5`, `-0` as `-0.0`, which
+//! `int` refuses, and an integer past `u64` as a float. Even with the feature, `serde_json`'s
+//! parser reads an integer as an `i64` or `u64` before keeping its text, so the text `-0` becomes
+//! `0`. To decode JSON text, read it with [`from_str`] rather than `serde_json::from_str`.
 
 mod bool;
 mod choice;
 mod decimal;
 mod dict;
 mod ext;
+mod input;
 pub(crate) mod ip;
+mod node;
 mod number;
 mod object;
 mod steps;
@@ -43,6 +48,8 @@ pub use choice::{
 pub use decimal::{DecimalDecoder, decimal};
 pub use dict::{Dict, dict};
 pub use ext::{JsonDecoderExt, ListDecoder, Nullable, ToSet};
+pub use input::{Elements, Input, Json, Members, Number, View, is_missing, missing};
+pub use node::{JsonObject, Lexeme, Node};
 pub use number::{
     F32Decoder, F64Decoder, FloatDecoder, IntDecoder, Integer, SignedInteger, f32, f64, i32, i64,
     u32, u64,
@@ -54,105 +61,53 @@ pub use object::{
 pub use string::{NormalizationForm, Parse, StringDecoder, UriDecoder, UuidDecoder, string};
 pub use temporal::TemporalDecoder;
 
-use crate::decoder::{Decoder, Nullish};
+use crate::codes;
+use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::path::Path;
-use crate::{codes, message_keys};
-use serde_json::Value;
 
 /// Everything needed to write decoders over JSON.
 pub mod prelude {
     pub use super::{
-        JsonDecoderExt, bool, decimal, dict, discriminate, discriminate_by, enum_of, f32, f64,
-        field, flat, from_str, i32, i64, literal, object, optional_field, presence_field, strict,
-        string, u32, u64, variant,
+        Json, JsonDecoderExt, Node, bool, decimal, dict, discriminate, discriminate_by, enum_of,
+        f32, f64, field, flat, from_str, i32, i64, literal, object, optional_field, presence_field,
+        strict, string, u32, u64, variant,
     };
     pub use crate::{BoxDecoder, Decoder, Issue, Issues, Presence, lazy, one_of};
     pub use serde_json::{Value, json};
 }
 
-static MISSING: Value = Value::Null;
-
-/// The value a missing member is decoded from: a `null` that [`is_missing`] tells apart from a
-/// `null` in the input.
-pub fn missing() -> &'static Value {
-    &MISSING
-}
-
-/// Whether `value` is [`missing()`] rather than a `null` read from the input.
-pub fn is_missing(value: &Value) -> bool {
-    std::ptr::eq(value, &MISSING)
-}
-
-/// A JSON null, or a missing member, which is handed to a decoder as [`missing()`].
-impl Nullish for Value {
-    fn is_null_or_missing(&self) -> bool {
-        self.is_null()
-    }
-}
-
-/// Parses `text` as JSON and decodes it with `decoder`. Text that is not JSON is reported as one
-/// `invalid_format` issue at the root, under the message key `invalid_format.json`, with the
-/// `line` and `column` where it stopped being JSON.
-///
-/// The text is read by `serde_json`, which reads the number `-0` as `0` (see
-/// [Numbers](self#numbers)).
+/// Reads `text` as JSON into a [`Node`] and decodes it with `decoder`. Text that is not JSON is
+/// reported as one `invalid_format` issue at the root, under the message key
+/// `invalid_format.json`, with the `line` and `column`, both counted from 1 and the column in
+/// characters, of where it stopped being JSON. So is an object with a name twice, and arrays and
+/// objects nested more than 128 deep.
 ///
 /// ```
 /// use raoh::json::prelude::*;
 ///
 /// let issues = from_str(&i64(), "{").unwrap_err();
 /// assert_eq!(issues.iter().next().unwrap().code(), "invalid_format");
+/// assert!(from_str(&f64(), "-0").unwrap().is_sign_negative());
 /// ```
-pub fn from_str<D: Decoder<Value>>(decoder: &D, text: &str) -> Result<D::Output, Issues> {
-    let value: Value = serde_json::from_str(text).map_err(|e| {
-        Issue::new(codes::INVALID_FORMAT)
-            .with_message_key(message_keys::INVALID_FORMAT_JSON)
-            .with_meta("line", e.line())
-            .with_meta("column", e.column())
-    })?;
-    decoder.decode(&value)
-}
-
-/// The kind of `value`, as `type_mismatch` names it in `actual`.
-pub(crate) fn node_type(value: &Value) -> &'static str {
-    match value {
-        v if is_missing(v) => "missing",
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
-}
-
-/// The text a number was written with, or with `serde_json`'s `arbitrary_precision` off, the text
-/// of the value it was read as. With the feature the text is borrowed, not written out again.
-pub(crate) fn lexeme(n: &serde_json::Number) -> std::borrow::Cow<'_, str> {
-    #[cfg(feature = "arbitrary_precision")]
-    {
-        std::borrow::Cow::Borrowed(n.as_str())
-    }
-    #[cfg(not(feature = "arbitrary_precision"))]
-    {
-        std::borrow::Cow::Owned(n.to_string())
-    }
+pub fn from_str<D: Decoder<Json>>(decoder: &D, text: &str) -> Result<D::Output, Issues> {
+    let node: Node = text.parse()?;
+    decoder.decode(&node)
 }
 
 pub(crate) fn required(path: &Path<'_>) -> Issue {
     Issue::at_path(path, codes::REQUIRED)
 }
 
-pub(crate) fn type_mismatch(path: &Path<'_>, expected: &'static str, found: &Value) -> Issue {
+pub(crate) fn type_mismatch(path: &Path<'_>, expected: &'static str, found: &Json) -> Issue {
     Issue::at_path(path, codes::TYPE_MISMATCH)
         .with_meta("expected", expected)
-        .with_meta("actual", node_type(found))
+        .with_meta("actual", found.view().kind())
 }
 
 /// `required` for a missing or null value, `type_mismatch` for anything else.
-pub(crate) fn unexpected(path: &Path<'_>, expected: &'static str, found: &Value) -> Issue {
-    if found.is_null() {
+pub(crate) fn unexpected(path: &Path<'_>, expected: &'static str, found: &Json) -> Issue {
+    if found.view().is_null_or_missing() {
         required(path)
     } else {
         type_mismatch(path, expected, found)
