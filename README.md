@@ -102,7 +102,9 @@ pub trait Decoder<I: ?Sized> {
 }
 ```
 
-A decoder is a value that describes how to read an input. It holds no state and can be reused.
+A decoder is a value that describes how to read an input. What it gives depends on the input
+alone, so it can be reused and shared between threads. It may keep what it has worked out, such as
+the matchers of a `pattern`, but nothing that changes a result.
 Decoders compose like iterator adapters, and the composed type is hidden behind
 `impl Decoder<Json, Output = T>`. Where a type has to be named, such as a recursive decoder or a
 decoder kept in a struct field or a `static`, `.boxed()` turns it into a

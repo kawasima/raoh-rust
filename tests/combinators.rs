@@ -167,3 +167,27 @@ fn from_str_reports_text_that_is_not_json() {
     assert!(issue.path().is_root());
     assert!(issue.meta().contains_key("line"));
 }
+
+#[test]
+fn lazy_builds_its_decoder_once_for_each_level_of_nesting() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static BUILT: AtomicUsize = AtomicUsize::new(0);
+
+    struct Tree(Vec<Tree>);
+    fn tree() -> BoxDecoder<Json, Tree> {
+        BUILT.fetch_add(1, Ordering::Relaxed);
+        object((field("children", lazy(tree).list()),))
+            .map(|(children,)| Tree(children))
+            .boxed()
+    }
+
+    let leaf = r#"{"children":[]}"#;
+    let text = format!(r#"{{"children":[{}]}}"#, vec![leaf; 100].join(","));
+    let decoder = tree();
+    for _ in 0..3 {
+        let Tree(children) = from_str(&decoder, &text).unwrap();
+        assert_eq!(children.len(), 100);
+    }
+    // The root's, and the one for the level of its children; the leaves have none to build.
+    assert_eq!(BUILT.load(Ordering::Relaxed), 2);
+}

@@ -69,6 +69,9 @@ Cost:
   doubles takes 35 µs, where `serde_json` with `arbitrary_precision` took 91 µs.
 - Reading a number allocates nothing, and lower-casing, upper-casing and normalizing ASCII text
   do not look its characters up in Unicode's tables.
+- `lazy` builds its decoder the first time it decodes and keeps it, where it built one for every
+  value it decoded, compiling the patterns inside again each time: a tree of 1000 nodes with a
+  `pattern` took 3.1 ms to decode and takes 61 µs.
 - `pattern` keeps a matcher for each thread that decodes with it at once, with what its matches
   have worked out, so a value is matched in lookups.
 - A strict decoder takes time in the members of its object, and `multiple_of` in the digits of the
@@ -82,6 +85,7 @@ Breaking:
   `missing()` gives a `&'static Json`, and `is_missing` takes one.
 - `from_str` reports a name written twice in one object, and arrays and objects nested more than
   128 deep, as `invalid_format`; its `column` counts characters from 1.
+- `Lazy` is `Lazy<F, D>`, with the type of the decoder it keeps, and is no longer `Copy`.
 - An issue's `meta` holds `MetaValue`s instead of `serde_json::Value`s.
 - The features `regex`, `decimal`, `uuid` and `url` are removed; what they gave is always there.
 - The MSRV is 1.88.

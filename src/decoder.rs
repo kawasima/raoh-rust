@@ -7,8 +7,11 @@ use std::borrow::Cow;
 
 /// Reads an input of type `I` into a value, or reports every issue it found.
 ///
-/// A decoder is a specification: it holds no state and can be applied any number of times. The
-/// adapters it offers build new decoders without running anything; the concrete types they return
+/// A decoder is a specification: what it gives for an input depends on that input and its path
+/// alone, so it can be applied any number of times, from any number of threads at once. It may
+/// keep what it has worked out, as [`pattern`](crate::json::StringDecoder::pattern) keeps its
+/// matchers and [`lazy`](crate::lazy) the decoder it builds, but nothing that changes a result. A
+/// decoder of your own keeps to this too. The adapters it offers build new decoders without running anything; the concrete types they return
 /// are meant to be hidden behind `impl Decoder<I, Output = T>`, and [`boxed`](Self::boxed) erases
 /// them where a type has to be named.
 ///
