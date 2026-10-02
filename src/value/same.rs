@@ -16,7 +16,23 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 /// date-times are the same only at the same offset.
 ///
 /// `unique`, `contains`, `contains_all` and `to_set` compare elements by it, so a list of any
-/// type that has it can use them. `same_hash` must give equal hashes to values that are the same.
+/// type that has it can use them.
+///
+/// # Laws
+///
+/// An implementation has to make `same` an equivalence relation, and has to give values that are
+/// the same the same hash:
+///
+/// - `a.same(&a)`;
+/// - `a.same(&b)` exactly when `b.same(&a)`;
+/// - `a.same(&b)` and `b.same(&c)` give `a.same(&c)`;
+/// - `a.same(&b)` gives the same `same_hash` for both, in a hasher of either's state, so a value
+///   whose sameness ignores an order, a set's or a map's, hashes in a way that ignores it too.
+///
+/// [`Set`] and the list constraints keep values in hash tables by `same` and `same_hash`. An
+/// implementation that breaks a law makes them keep one value twice or miss a duplicate, as a
+/// `HashSet` does with an `Eq` and a `Hash` that disagree. A float's `==` breaks the first law at
+/// NaN, which is why floats are compared by their own implementation here and not by `==`.
 pub trait Same {
     /// Whether `self` and `other` are the same value.
     fn same(&self, other: &Self) -> bool;
@@ -399,6 +415,113 @@ impl<T: Same> Same for Set<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn hash_of<T: Same>(value: &T) -> u64 {
+        let mut h = DefaultHasher::new();
+        value.same_hash(&mut h);
+        h.finish()
+    }
+
+    /// Checks the laws of [`Same`] on every pair and triple of `values`.
+    fn laws<T: Same + fmt::Debug>(values: &[T]) {
+        for a in values {
+            assert!(a.same(a), "{a:?} is not the same as itself");
+            for b in values {
+                assert_eq!(a.same(b), b.same(a), "{a:?} and {b:?}");
+                if a.same(b) {
+                    assert_eq!(hash_of(a), hash_of(b), "{a:?} and {b:?} hash apart");
+                    for c in values {
+                        assert!(!b.same(c) || a.same(c), "{a:?}, {b:?} and {c:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    fn parsed<T: std::str::FromStr>(texts: &[&str]) -> Vec<T> {
+        texts
+            .iter()
+            .map(|t| t.parse().unwrap_or_else(|_| panic!("{t} does not parse")))
+            .collect()
+    }
+
+    #[test]
+    fn every_sameness_here_keeps_the_laws() {
+        let nan_payload = f64::from_bits(f64::NAN.to_bits() | 1);
+        let doubles = [
+            0.0,
+            -0.0,
+            f64::NAN,
+            -f64::NAN,
+            nan_payload,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            1.0,
+            1.0,
+        ];
+        laws(&doubles);
+        laws(&doubles.map(|v| v as f32));
+        laws(&[f32::from_bits(f32::NAN.to_bits() | 1), f32::NAN, 0.0]);
+        let decimals: Vec<Decimal> = parsed(&["1.5", "1.50", "-0", "0", "0.0", "1E+1", "10", "10"]);
+        laws(&decimals);
+        laws(&parsed::<OffsetDateTime>(&[
+            "2024-01-01T00:00Z",
+            "2024-01-01T09:00+09:00",
+            "2024-01-01T00:00Z",
+        ]));
+        laws(&parsed::<Instant>(&[
+            "2024-01-01T00:00:00Z",
+            "2024-01-01T09:00:00+09:00",
+        ]));
+        laws(&["a".to_owned(), "a".to_owned(), String::new()]);
+        laws(&doubles.map(Some));
+        laws(&[None, Some(0.0), Some(-0.0)]);
+        laws(&[
+            Presence::Absent,
+            Presence::Null,
+            Presence::Present(f64::NAN),
+            Presence::Present(nan_payload),
+        ]);
+        laws(&[
+            vec![0.0, f64::NAN],
+            vec![0.0, nan_payload],
+            vec![-0.0, f64::NAN],
+            vec![],
+        ]);
+        laws(&[
+            (0.0, decimals[0].clone()),
+            (-0.0, decimals[0].clone()),
+            (0.0, decimals[1].clone()),
+        ]);
+        let map = |members: &[(&str, f64)]| -> IndexMap<String, f64> {
+            members.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect()
+        };
+        laws(&[
+            map(&[("a", 0.0), ("b", f64::NAN)]),
+            map(&[("b", nan_payload), ("a", 0.0)]),
+            map(&[("a", -0.0), ("b", f64::NAN)]),
+            map(&[]),
+        ]);
+        let set = |items: &[f64]| -> Set<f64> { items.iter().copied().collect() };
+        laws(&[
+            set(&[0.0, -0.0, f64::NAN]),
+            set(&[nan_payload, -0.0, 0.0]),
+            set(&[0.0]),
+        ]);
+        laws(&[
+            MetaValue::Int(1),
+            MetaValue::UInt(1),
+            MetaValue::Float64(0.0),
+            MetaValue::Float64(-0.0),
+            MetaValue::Float64(f64::NAN),
+            MetaValue::Float64(nan_payload),
+            MetaValue::Float32(f32::NAN),
+            MetaValue::Decimal(decimals[0].clone()),
+            MetaValue::Decimal(decimals[1].clone()),
+            MetaValue::List(vec![MetaValue::Float64(f64::NAN)]),
+            MetaValue::List(vec![MetaValue::Float64(nan_payload)]),
+        ]);
+    }
 
     #[test]
     fn floats_are_the_same_as_the_value_model_says() {

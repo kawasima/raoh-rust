@@ -10,6 +10,12 @@ use std::borrow::Cow;
 /// Every decoder of [`json`](super) reads a [`Json`], which is `dyn Input`, so it reads any value
 /// that implements this: a [`Node`](super::Node), which [`from_str`](super::from_str) reads JSON
 /// text into, or a [`serde_json::Value`].
+///
+/// # Laws
+///
+/// A decoder may look at a value more than once, so `view` has to give the same view each time it
+/// is called on the same value. [`View::Missing`] stands for a member that is not there: a value
+/// that is there never gives it. [`Elements`] and [`Members`] state what their views have to keep.
 pub trait Input {
     /// What this value is.
     fn view(&self) -> View<'_>;
@@ -69,6 +75,10 @@ impl View<'_> {
 }
 
 /// The elements of an array, in order.
+///
+/// # Laws
+///
+/// `get` gives an element for every index below `len`, and nothing from `len` on.
 pub trait Elements {
     /// How many there are.
     fn len(&self) -> usize;
@@ -90,6 +100,14 @@ impl<'a> dyn Elements + 'a {
 }
 
 /// The members of an object, each a name and a value, with no name twice.
+///
+/// # Laws
+///
+/// `each` hands every member to its visitor once, `len` of them, with no name twice, in the same
+/// order every time it is called. `get` gives the value `each` hands with that name, and nothing
+/// for a name `each` does not hand. Field decoders find members with `get`, and `dict` and the
+/// strict decoders go over them with `each`, so a value one sees and the other does not is
+/// decoded by one and reported unknown, or left out, by the other.
 pub trait Members {
     /// How many there are.
     fn len(&self) -> usize;
@@ -292,6 +310,76 @@ impl Members for serde_json::Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The same value: `a` and `b` at the same address. Only the data part of a `&dyn` is
+    /// compared, which two references to one value share.
+    fn at_same_place(a: &Json, b: &Json) -> bool {
+        std::ptr::eq(a as *const Json as *const u8, b as *const Json as *const u8)
+    }
+
+    /// Checks the laws of [`Input`], [`Elements`] and [`Members`] on `value` and on everything in it.
+    fn laws(value: &Json) {
+        match (value.view(), value.view()) {
+            (View::Missing, _) => panic!("a value that is there gives Missing"),
+            (View::Null, View::Null) => {}
+            (View::Bool(a), View::Bool(b)) => assert_eq!(a, b),
+            (View::Number(a), View::Number(b)) => {
+                assert_eq!(a.lexeme(), b.lexeme());
+                assert!(is_number(&a.lexeme()), "{a:?}");
+            }
+            (View::String(a), View::String(b)) => assert_eq!(a, b),
+            (View::Array(a), View::Array(b)) => {
+                assert_eq!(a.len(), b.len());
+                for i in 0..a.len() {
+                    laws(a.get(i).expect("an element below len"));
+                }
+                assert!(a.get(a.len()).is_none());
+                assert_eq!(a.iter().count(), a.len());
+            }
+            (View::Object(a), View::Object(b)) => {
+                let mut seen: Vec<(String, *const u8)> = Vec::new();
+                a.each(&mut |name, member| {
+                    let found = a.get(name).expect("get finds what each hands");
+                    assert!(
+                        at_same_place(found, member),
+                        "get and each differ at {name}"
+                    );
+                    seen.push((name.to_owned(), member as *const Json as *const u8));
+                    laws(member);
+                });
+                let mut again = Vec::new();
+                b.each(&mut |name, member| {
+                    again.push((name.to_owned(), member as *const Json as *const u8));
+                });
+                assert_eq!(seen, again, "each hands the members in another order");
+                assert_eq!(seen.len(), a.len());
+                let mut names: Vec<&str> = seen.iter().map(|(n, _)| n.as_str()).collect();
+                names.sort_unstable();
+                names.dedup();
+                assert_eq!(names.len(), seen.len(), "a name twice");
+                assert!(a.get("not a member of any object here").is_none());
+            }
+            (a, b) => panic!("{} then {}", a.kind(), b.kind()),
+        }
+    }
+
+    #[test]
+    fn every_input_here_keeps_the_laws() {
+        let wide: Vec<String> = (0..20)
+            .map(|i| format!("\"m{}\":[{i},-0]", 19 - i))
+            .collect();
+        for text in [
+            r#"{"b":[1,2.50,-0,{"x":null}],"a":true,"c":"s","":{},"d":[]}"#.to_owned(),
+            format!("{{{}}}", wide.join(",")),
+            "[[],[[1e400]],false,null]".to_owned(),
+        ] {
+            let node: crate::json::Node = text.parse().unwrap();
+            laws(&node);
+            let value: Value = serde_json::from_str(&text).unwrap();
+            laws(&value);
+        }
+        assert!(matches!(missing().view(), View::Missing));
+    }
 
     #[test]
     fn json_numbers_are_told_from_other_text() {

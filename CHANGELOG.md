@@ -39,6 +39,9 @@ New:
   model. `raoh::json::Node` is one, and `from_str` reads JSON text into it with raoh's own reader:
   every number keeps its text inside the node, and every object its members in the order written.
   A `serde_json::Value` is one too.
+- The laws an implementation of `Same`, `Input`, `Elements` or `Members` has to keep, which sets,
+  list constraints and field decoders rely on, are stated in their documentation, and tests check
+  every implementation in the crate against them.
 - `f32()`, `uri()`, `normalize`, `to_int`, `to_long`, `to_decimal`, `to_bool`, and the temporal
   conversions `instant`, `date`, `time`, `date_time` and `offset_date_time` with `before`, `after`
   and `between`.
