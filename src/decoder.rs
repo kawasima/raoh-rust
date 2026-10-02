@@ -1,6 +1,6 @@
 //! The decoder abstraction and the adapters it composes with.
 
-use crate::combinator::{AndThen, Map, Pipe, Recover, Refine, WithDefault};
+use crate::combinator::{AndThen, Map, Pipe, Recover, RecoverWith, Refine, WithDefault};
 use crate::issue::Issues;
 use crate::path::Path;
 use std::borrow::Cow;
@@ -108,12 +108,25 @@ pub trait Decoder<I: ?Sized> {
         Refine::new(self, predicate, code.into(), message.into())
     }
 
-    /// A decoder that gives `value` when the input is missing or null, which is when every issue
-    /// this one reports is `required`. Any other issue is still reported.
+    /// A decoder that gives `value` when the input is null or missing, and otherwise gives what
+    /// this one gives for it.
+    ///
+    /// Whether the input is null or missing is looked at before this decoder runs, so an object
+    /// that is there but lacks a member is reported as this decoder reports it, not defaulted.
+    ///
+    /// ```
+    /// use raoh::json::prelude::*;
+    ///
+    /// let page = object((field("page", i32().with_default(1)),));
+    /// assert_eq!(page.decode(&json!({})).unwrap(), (1,));
+    /// assert_eq!(page.decode(&json!({"page": null})).unwrap(), (1,));
+    /// assert!(page.decode(&json!({"page": "x"})).is_err());
+    /// ```
     fn with_default(self, value: Self::Output) -> WithDefault<Self, Self::Output>
     where
         Self: Sized,
         Self::Output: Clone,
+        I: Nullish,
     {
         WithDefault::new(self, value)
     }
@@ -127,6 +140,22 @@ pub trait Decoder<I: ?Sized> {
         Recover::new(self, value)
     }
 
+    /// A decoder that gives what `f` makes of the issues whenever this one fails.
+    ///
+    /// ```
+    /// use raoh::json::prelude::*;
+    ///
+    /// let count = i32().recover_with(|issues| -(issues.len() as i32));
+    /// assert_eq!(count.decode(&json!("x")).unwrap(), -1);
+    /// ```
+    fn recover_with<F>(self, f: F) -> RecoverWith<Self, F>
+    where
+        Self: Sized,
+        F: Fn(&Issues) -> Self::Output,
+    {
+        RecoverWith::new(self, f)
+    }
+
     /// This decoder behind a pointer, so its type can be named and it can be shared across
     /// threads.
     fn boxed(self) -> BoxDecoder<I, Self::Output>
@@ -135,6 +164,13 @@ pub trait Decoder<I: ?Sized> {
     {
         Box::new(self)
     }
+}
+
+/// An input that can stand for no value at all, which [`Decoder::with_default`] replaces with its
+/// default.
+pub trait Nullish {
+    /// Whether this is null, or stands for a value that is missing.
+    fn is_null_or_missing(&self) -> bool;
 }
 
 /// A decoder whose concrete type is erased.

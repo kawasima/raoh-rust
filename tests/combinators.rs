@@ -1,5 +1,5 @@
 use raoh::json::prelude::*;
-use raoh::{BoxDecoder, Issue, decoder_fn};
+use raoh::{BoxDecoder, Issue, Messages, MetaValue, decoder_fn};
 
 fn paths(issues: &Issues) -> Vec<String> {
     issues.iter().map(|i| i.path().to_string()).collect()
@@ -100,10 +100,21 @@ fn one_of_lists_each_candidate_issues() {
     let issues = decoder.decode(&json!("ab")).unwrap_err();
     let issue = issues.iter().next().unwrap();
     assert_eq!(issue.code(), "one_of_failed");
-    let candidates = issue.meta()["candidates"].as_array().unwrap();
+    let candidates = issue.meta()["candidates"].as_list().unwrap();
     assert_eq!(candidates.len(), 2);
-    assert_eq!(candidates[1]["candidate"], 1);
-    assert_eq!(candidates[1]["issues"][0]["code"], "too_short");
+    let MetaValue::Record(second) = &candidates[1] else {
+        panic!("a candidate is a record");
+    };
+    assert_eq!(second["candidate"], MetaValue::from(1));
+    let MetaValue::Issues(found) = &second["issues"] else {
+        panic!("a candidate's issues are issues");
+    };
+    assert_eq!(found.iter().next().unwrap().code(), "too_short");
+
+    let japanese = issues.to_json_with(Messages::japanese());
+    let written = &japanese[0]["meta"]["candidates"][1]["issues"][0];
+    assert_eq!(written["code"], "too_short");
+    assert_eq!(written["message"], "3文字以上で入力してください");
 }
 
 #[derive(Debug)]

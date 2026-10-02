@@ -35,25 +35,46 @@
 //! Independent parts are combined with a tuple, which reports the issues of every part;
 //! [`Decoder::and_then`] checks what depends on several parts together, once they have all been
 //! read.
+//!
+//! # The Raoh Specification
+//!
+//! The decoders behave as the [Raoh Specification](https://github.com/raoh-project/raoh-specification)
+//! says, and are checked against its cases by `scripts/conformance.sh`: which inputs each accepts,
+//! the issues each reports, their paths, metadata and messages, and the value model, in which a
+//! decimal keeps its scale, a float has two zeros and one NaN, and an offset date-time keeps its
+//! offset. The decoders read the specification's input model, a JSON value whose numbers keep the
+//! text they were written with, when `serde_json` keeps that text: see [`json`] on its
+//! `arbitrary_precision` feature.
 
 #![warn(missing_docs)]
 
 pub mod combinator;
 mod decoder;
+pub mod encode;
 mod issue;
-mod java;
 pub mod json;
 mod message;
+mod meta;
 mod path;
 mod presence;
+mod properties;
+mod value;
 mod vocabulary;
 
 pub use combinator::{lazy, one_of};
-pub use decoder::{BoxDecoder, Decoder, FnDecoder, decoder_fn};
+pub use decoder::{BoxDecoder, Decoder, FnDecoder, Nullish, decoder_fn};
 pub use issue::{Issue, Issues};
 pub use message::{MessageResolver, Messages, PropertiesError};
+pub use meta::MetaValue;
 pub use path::{Path, Pointer, Segment};
 pub use presence::Presence;
+pub use value::decimal::{Decimal, ParseDecimalError};
+pub use value::float::{Float, float_order, float_same};
+pub use value::temporal::{
+    Chronological, Date, DateTime, Instant, OffsetDateTime, ParseTemporalError, Time,
+};
+pub use value::uri::{ParseUriError, Uri};
+pub use value::uuid::{ParseUuidError, Uuid};
 
 #[doc = include_str!("../README.md")]
 #[cfg(doctest)]

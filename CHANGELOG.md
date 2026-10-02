@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.2.0 - Unreleased
+
+The decoders follow the Raoh Specification 0.9.0-dev, and `scripts/conformance.sh` checks them
+against every case of its suite: core, encode, messages-en and messages-ja are conformant.
+
+What each decoder accepts and reports:
+
+- A number is read from the text it was written with, which `serde_json` keeps with the new
+  `arbitrary_precision` feature: `int` refuses `1.0`, `decimal` keeps the scale of `1.50`, and an
+  integer of any length is told from a float.
+- Each field of an `object` checks for itself that the input is an object: a required field of
+  anything else, `null` and a missing member included, is `type_mismatch` with `expected` `object`
+  at its own path, and an optional field reads it as not having the member. `object` reported one
+  issue at its own path. `discriminate` reads its tag the same way.
+- `with_default` gives the default for a null or missing input, looked at before the decoder runs.
+  It gave the default whenever every issue was `required`, so an object missing a member was
+  defaulted as a whole.
+- `trim`, `non_blank`, `lowercase` and `uppercase` follow Unicode 18.0.0 through 199x-notation,
+  whatever Rust release the crate is built with, and lengths count Unicode scalar values.
+- `email` accepts the specification's ASCII profile of RFC 5321's `Mailbox`; `ulid` takes either
+  case and refuses a value past 128 bits; `uuid` reads only the hyphenated 8-4-4-4-12 form.
+- `pattern` takes the specification's pattern language instead of the `regex` crate's syntax, and
+  matches in one pass over the value.
+- `url` reads an RFC 3986 URI with an `http` or `https` scheme and a host, and gives the text as
+  written instead of the `url` crate's normalised URL.
+- A float in a message is its canonical decimal at its own width: an `f32` bound of 0.1 is `0.1`.
+- A template placeholder with no metadata entry stays as written, instead of passing the template
+  over.
+- `one_of_failed` keeps each candidate's issues as issues, so they are written in the language of
+  the whole.
+
+New:
+
+- `f32()`, `uri()`, `normalize`, `to_int`, `to_long`, `to_decimal`, `to_bool`, and the temporal
+  conversions `instant`, `date`, `time`, `date_time` and `offset_date_time` with `before`, `after`
+  and `between`.
+- `Decimal`, of any precision with a 32-bit scale; `Date`, `Time`, `DateTime`, `OffsetDateTime`
+  and `Instant`; `Uuid` and `Uri`. They replace `rust_decimal`, `uuid` and `url`, whose features
+  are gone.
+- `contains`, `contains_all` and `to_set` on lists; `non_empty`, `min_size`, `max_size` and `size`
+  on `dict`.
+- `flat` fields, `strict(decoder, names)` around any decoder, `discriminate_by`,
+  `recover_with`, and `enum_of(...).using(...)` and `literal(...).using(...)` with a message of
+  their own.
+- `Vec` alternatives for `one_of`, `Vec` variants for `discriminate`, and `Vec`s of boxed fields
+  for `object`, for decoders whose parts are decided at run time.
+- `raoh::encode`, with a string encoder and an object encoder of properties with defaults.
+
+Breaking:
+
+- An issue's `meta` holds `MetaValue`s instead of `serde_json::Value`s.
+- The features `regex`, `decimal`, `uuid` and `url` are removed; what they gave is always there.
+- The MSRV is 1.88.
+- `tests/compat`, which compared the decoders with Raoh for Java 0.8, is replaced by the
+  specification's suite.
+
 ## 0.1.0 - 2026-09-27
 
 First release: a Rust port of Raoh for decoding `serde_json::Value`.

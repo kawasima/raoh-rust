@@ -1,10 +1,12 @@
 use super::steps::Steps;
 use super::{is_missing, unexpected};
+use crate::combinator::Map;
 use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
+use crate::meta::MetaValue;
 use crate::path::Path;
 use crate::{codes, message_keys};
-use serde::Serialize;
+use indexmap::IndexSet;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -53,7 +55,10 @@ impl<D: Decoder<Value>> Decoder<Value> for Nullable<D> {
 /// The decoder [`JsonDecoderExt::list`] returns.
 ///
 /// Constraints on the whole list run once every element has decoded, in the order they are
-/// written, and the first to fail is the one reported.
+/// written, and the first to fail is the one reported. Those that compare elements, `unique`,
+/// `contains` and `contains_all`, compare them as the value model of the Raoh Specification
+/// does, through [`MetaValue`]: for floats +0 and -0 differ and NaN is NaN, and decimals of
+/// different scales differ.
 pub struct ListDecoder<D: Decoder<Value>> {
     element: D,
     steps: Steps<Vec<D::Output>>,
@@ -99,6 +104,11 @@ impl<D: Decoder<Value>> Decoder<Value> for ListDecoder<D> {
     }
 }
 
+/// The value-model reading of an element, by which the list constraints compare elements.
+fn meta<T: Clone + Into<MetaValue>>(item: &T) -> MetaValue {
+    item.clone().into()
+}
+
 impl<D: Decoder<Value>> ListDecoder<D>
 where
     D::Output: 'static,
@@ -112,15 +122,8 @@ where
 
     /// Requires at least one element: `too_small` with `min` 1 and `actual` 0.
     pub fn non_empty(mut self) -> Self {
-        self.steps.require(
-            |items| !items.is_empty(),
-            |_| {
-                Issue::new(codes::TOO_SMALL)
-                    .with_message_key(message_keys::TOO_SMALL_NONEMPTY)
-                    .with_meta("min", 1)
-                    .with_meta("actual", 0)
-            },
-        );
+        self.steps
+            .require(|items| !items.is_empty(), |_| non_empty_issue());
         self
     }
 
@@ -128,11 +131,7 @@ where
     pub fn min_size(mut self, n: usize) -> Self {
         self.steps.require(
             move |items| items.len() >= n,
-            move |items| {
-                Issue::new(codes::TOO_SMALL)
-                    .with_meta("min", n)
-                    .with_meta("actual", items.len())
-            },
+            move |items| min_size_issue(n, items.len()),
         );
         self
     }
@@ -141,11 +140,7 @@ where
     pub fn max_size(mut self, n: usize) -> Self {
         self.steps.require(
             move |items| items.len() <= n,
-            move |items| {
-                Issue::new(codes::TOO_BIG)
-                    .with_meta("max", n)
-                    .with_meta("actual", items.len())
-            },
+            move |items| max_size_issue(n, items.len()),
         );
         self
     }
@@ -154,33 +149,31 @@ where
     pub fn size(mut self, n: usize) -> Self {
         self.steps.require(
             move |items| items.len() == n,
-            move |items| {
-                Issue::new(codes::INVALID_SIZE)
-                    .with_meta("expected", n)
-                    .with_meta("actual", items.len())
-            },
+            move |items| size_issue(n, items.len()),
         );
         self
     }
 
-    /// Requires no element to appear twice: `duplicate_element` with each repeated element once,
-    /// in the order its repetition was found, as `duplicates`.
+    /// Requires no element to occur twice: `duplicate_element` with `duplicates`, which lists each
+    /// repeated element once, ordered by where it first became a duplicate, its second occurrence:
+    /// `[1, 2, 2, 1]` lists 2 before 1.
     pub fn unique(mut self) -> Self
     where
-        D::Output: Eq + Hash + Serialize,
+        D::Output: Clone + Into<MetaValue>,
     {
         self.steps.require(
             |items| {
                 let mut seen = HashSet::with_capacity(items.len());
-                items.iter().all(|item| seen.insert(item))
+                items.iter().all(|item| seen.insert(meta(item)))
             },
             |items| {
                 let mut seen = HashSet::with_capacity(items.len());
                 let mut repeated = HashSet::new();
-                let mut duplicates: Vec<Value> = Vec::new();
+                let mut duplicates: Vec<MetaValue> = Vec::new();
                 for item in items {
-                    if !seen.insert(item) && repeated.insert(item) {
-                        duplicates.push(serde_json::to_value(item).unwrap_or(Value::Null));
+                    let value = meta(item);
+                    if !seen.insert(value.clone()) && repeated.insert(value.clone()) {
+                        duplicates.push(value);
                     }
                 }
                 Issue::new(codes::DUPLICATE_ELEMENT).with_meta("duplicates", duplicates)
@@ -188,13 +181,104 @@ where
         );
         self
     }
+
+    /// Requires `element` to occur: `missing_element` with `expected`.
+    pub fn contains(mut self, element: D::Output) -> Self
+    where
+        D::Output: Clone + Into<MetaValue> + Send + Sync,
+    {
+        let expected = meta(&element);
+        let check = expected.clone();
+        self.steps.require(
+            move |items| items.iter().any(|item| meta(item) == check),
+            move |_| Issue::new(codes::MISSING_ELEMENT).with_meta("expected", expected.clone()),
+        );
+        self
+    }
+
+    /// Requires every one of `elements` to occur: `missing_elements` with `expected`, the elements
+    /// as given, and `missing`, in the order given, each given element that does not occur, as
+    /// many times as it was given.
+    pub fn contains_all(mut self, elements: impl IntoIterator<Item = D::Output>) -> Self
+    where
+        D::Output: Clone + Into<MetaValue> + Send + Sync,
+    {
+        let expected: Vec<MetaValue> = elements.into_iter().map(|e| meta(&e)).collect();
+        let missing = {
+            let expected = expected.clone();
+            move |items: &Vec<D::Output>| -> Vec<MetaValue> {
+                let present: HashSet<MetaValue> = items.iter().map(meta).collect();
+                expected
+                    .iter()
+                    .filter(|e| !present.contains(*e))
+                    .cloned()
+                    .collect()
+            }
+        };
+        let check = missing.clone();
+        self.steps.require(
+            move |items| check(items).is_empty(),
+            move |items| {
+                Issue::new(codes::MISSING_ELEMENTS)
+                    .with_meta("expected", expected.clone())
+                    .with_meta("missing", missing(items))
+            },
+        );
+        self
+    }
+
+    /// A decoder of the set of the elements, in the order each first occurs.
+    pub fn to_set(self) -> ToSet<D>
+    where
+        D::Output: Eq + Hash,
+    {
+        self.map(collect_set as fn(Vec<D::Output>) -> IndexSet<D::Output>)
+    }
+}
+
+/// The decoder [`ListDecoder::to_set`] returns.
+pub type ToSet<D> = Map<ListDecoder<D>, fn(Vec<Element<D>>) -> IndexSet<Element<D>>>;
+
+type Element<D> = <D as Decoder<Value>>::Output;
+
+fn collect_set<T: Eq + Hash>(items: Vec<T>) -> IndexSet<T> {
+    items.into_iter().collect()
+}
+
+pub(crate) fn non_empty_issue() -> Issue {
+    Issue::new(codes::TOO_SMALL)
+        .with_message_key(message_keys::TOO_SMALL_NONEMPTY)
+        .with_meta("min", 1)
+        .with_meta("actual", 0)
+}
+
+pub(crate) fn min_size_issue(min: usize, actual: usize) -> Issue {
+    Issue::new(codes::TOO_SMALL)
+        .with_meta("min", min)
+        .with_meta("actual", actual)
+}
+
+pub(crate) fn max_size_issue(max: usize, actual: usize) -> Issue {
+    Issue::new(codes::TOO_BIG)
+        .with_meta("max", max)
+        .with_meta("actual", actual)
+}
+
+pub(crate) fn size_issue(expected: usize, actual: usize) -> Issue {
+    Issue::new(codes::INVALID_SIZE)
+        .with_meta("expected", expected)
+        .with_meta("actual", actual)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::json::{i64, missing, string};
+    use crate::json::{f64, i64, missing, string};
     use serde_json::json;
+
+    fn first<T: std::fmt::Debug>(result: Result<T, Issues>) -> Issue {
+        result.unwrap_err().into_iter().next().unwrap()
+    }
 
     #[test]
     fn nullable_accepts_null_but_not_missing() {
@@ -212,15 +296,40 @@ mod tests {
     }
 
     #[test]
-    fn unique_reports_each_duplicate_once() {
-        let issues = i64()
-            .list()
-            .unique()
-            .decode(&json!([1, 2, 1, 2, 1]))
-            .unwrap_err();
-        let issue = issues.iter().next().unwrap();
-        assert_eq!(issue.meta()["duplicates"], json!([1, 2]));
-        assert_eq!(issue.message(), "must not contain duplicates: [1, 2]");
+    fn unique_reports_each_duplicate_once_where_it_first_repeats() {
+        let issue = first(i64().list().unique().decode(&json!([1, 2, 2, 1])));
+        assert_eq!(issue.meta()["duplicates"], MetaValue::from(vec![2, 1]));
+        assert_eq!(issue.message(), "must not contain duplicates: [2, 1]");
+    }
+
+    #[test]
+    fn floats_are_compared_as_the_value_model_compares_them() {
+        let input: Value = serde_json::from_str("[0.0, -0.0]").unwrap();
+        assert!(f64().list().unique().decode(&input).is_ok());
+        assert!(f64().list().contains(-0.0).decode(&json!([0.0])).is_err());
+    }
+
+    #[test]
+    fn contains_all_lists_what_is_missing_as_often_as_given() {
+        let issue = first(i64().list().contains_all([1, 3, 3]).decode(&json!([2])));
+        assert_eq!(issue.meta()["missing"], MetaValue::from(vec![1, 3, 3]));
+        assert_eq!(
+            issue.message(),
+            "must contain all of [1, 3, 3] (missing: [1, 3, 3])"
+        );
+        assert!(
+            i64()
+                .list()
+                .contains_all([1, 3])
+                .decode(&json!([3, 1]))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn to_set_keeps_each_element_once() {
+        let set = i64().list().to_set().decode(&json!([1, 2, 1, 3])).unwrap();
+        assert_eq!(set.into_iter().collect::<Vec<_>>(), [1, 2, 3]);
     }
 
     #[test]
