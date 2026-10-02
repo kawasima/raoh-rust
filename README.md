@@ -26,7 +26,7 @@ value of it from outside is through its decoder, so a value that exists has been
 
 ```toml
 [dependencies]
-raoh = "0.1"
+raoh = "0.9.0-dev"
 ```
 
 Optional features:
@@ -264,7 +264,7 @@ language of the specification, the one Souther has, and matches a value in one p
 - `flat(d)`: the whole input read by `d`, as one value of the object
 - `d.nullable()`: `Option<T>`, `None` when the value is `null`
 - `d.list()`: `Vec<T>`, with `non_empty`, `min_size`, `max_size`, `size`, `unique`, `contains`,
-  `contains_all` and `to_set`
+  `contains_all` and `to_set`, which gives a `Set<T>`
 - `dict(d)`: an `IndexMap<String, T>` from an object used as a map, in the order the `Value`
   keeps its keys, with `non_empty`, `min_size`, `max_size` and `size`
 
@@ -274,6 +274,11 @@ at the field's own path; an optional field reads it as not having the member. `o
 also reports every member no field names as `unknown_field`, and `strict(d, names)` does the same
 around any decoder, such as a `discriminate`. Strict decoders one inside another report a member
 once, by the innermost one that does not know it.
+
+`unique`, `contains`, `contains_all` and `to_set` compare elements by `Same`, the value model's
+sameness, not by Rust's `Eq`: for floats -0 and +0 are two values and every NaN one, and decimals
+of different scales differ. So `f64().list().to_set()` is a `Set<f64>` of each value once, though
+`f64` has no `Eq` or `Hash`.
 
 A missing member and a `null` one are different inputs. `field("note", string().nullable())`
 accepts `null` but reports a missing member as `required`, while `optional_field` accepts a
@@ -415,7 +420,8 @@ text `-0`, and a decoder given one reads -0; only the parser loses the sign.
 
 ## The Raoh Specification
 
-This crate is checked against the [Raoh Specification](https://github.com/raoh-project/raoh-specification)
+The version of this crate is the version of the specification it follows: 0.9.0-dev follows the
+Raoh Specification 0.9.0-dev. This crate is checked against the [Raoh Specification](https://github.com/raoh-project/raoh-specification)
 by `scripts/conformance.sh`, which runs every case of the revision `conformance/spec.lock` pins
 through the runner in `conformance/` and has the specification's `raoh-verify` compare what it
 gave with what each case expects. At the pinned revision:

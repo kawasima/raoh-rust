@@ -1,11 +1,11 @@
 [package]
 name = "raoh"
-version = "0.2.0"
+version = "0.9.0-dev"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
 description = "Decoders that turn untyped JSON into typed domain values, reporting every issue with its path"
-repository = "https://github.com/kawasima/raoh-rust"
+repository = "https://github.com/raoh-project/raoh-rust"
 readme = "README.md"
 keywords = ["decoder", "validation", "json", "parse", "domain"]
 categories = ["parsing", "encoding"]

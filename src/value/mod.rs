@@ -4,6 +4,7 @@
 
 pub(crate) mod decimal;
 pub(crate) mod float;
+pub(crate) mod same;
 pub(crate) mod temporal;
 pub(crate) mod uri;
 pub(crate) mod uuid;

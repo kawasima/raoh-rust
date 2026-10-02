@@ -5,11 +5,10 @@ use crate::decoder::Decoder;
 use crate::issue::{Issue, Issues};
 use crate::meta::MetaValue;
 use crate::path::Path;
+use crate::value::same::{ByValue, Same, Set};
 use crate::{codes, message_keys};
-use indexmap::IndexSet;
 use serde_json::Value;
 use std::collections::HashSet;
-use std::hash::Hash;
 
 /// What every decoder over a JSON value can also do.
 pub trait JsonDecoderExt: Decoder<Value> + Sized {
@@ -104,11 +103,6 @@ impl<D: Decoder<Value>> Decoder<Value> for ListDecoder<D> {
     }
 }
 
-/// The value-model reading of an element, by which the list constraints compare elements.
-fn meta<T: Clone + Into<MetaValue>>(item: &T) -> MetaValue {
-    item.clone().into()
-}
-
 impl<D: Decoder<Value>> ListDecoder<D>
 where
     D::Output: 'static,
@@ -154,26 +148,25 @@ where
         self
     }
 
-    /// Requires no element to occur twice: `duplicate_element` with `duplicates`, which lists each
-    /// repeated element once, ordered by where it first became a duplicate, its second occurrence:
-    /// `[1, 2, 2, 1]` lists 2 before 1.
+    /// Requires no element to occur twice, by [`Same`]: `duplicate_element` with `duplicates`,
+    /// which lists each repeated element once, ordered by where it first became a duplicate, its
+    /// second occurrence: `[1, 2, 2, 1]` lists 2 before 1.
     pub fn unique(mut self) -> Self
     where
-        D::Output: Clone + Into<MetaValue>,
+        D::Output: Same + Clone + Into<MetaValue>,
     {
         self.steps.require(
             |items| {
                 let mut seen = HashSet::with_capacity(items.len());
-                items.iter().all(|item| seen.insert(meta(item)))
+                items.iter().all(|item| seen.insert(ByValue(item)))
             },
             |items| {
                 let mut seen = HashSet::with_capacity(items.len());
                 let mut repeated = HashSet::new();
                 let mut duplicates: Vec<MetaValue> = Vec::new();
                 for item in items {
-                    let value = meta(item);
-                    if !seen.insert(value.clone()) && repeated.insert(value.clone()) {
-                        duplicates.push(value);
+                    if !seen.insert(ByValue(item)) && repeated.insert(ByValue(item)) {
+                        duplicates.push(item.clone().into());
                     }
                 }
                 Issue::new(codes::DUPLICATE_ELEMENT).with_meta("duplicates", duplicates)
@@ -182,38 +175,36 @@ where
         self
     }
 
-    /// Requires `element` to occur: `missing_element` with `expected`.
+    /// Requires an element the same as `element`, by [`Same`]: `missing_element` with
+    /// `expected`.
     pub fn contains(mut self, element: D::Output) -> Self
     where
-        D::Output: Clone + Into<MetaValue> + Send + Sync,
+        D::Output: Same + Clone + Into<MetaValue> + Send + Sync,
     {
-        let expected = meta(&element);
-        let check = expected.clone();
+        let expected: MetaValue = element.clone().into();
         self.steps.require(
-            move |items| items.iter().any(|item| meta(item) == check),
+            move |items| items.iter().any(|item| item.same(&element)),
             move |_| Issue::new(codes::MISSING_ELEMENT).with_meta("expected", expected.clone()),
         );
         self
     }
 
-    /// Requires every one of `elements` to occur: `missing_elements` with `expected`, the elements
-    /// as given, and `missing`, in the order given, each given element that does not occur, as
-    /// many times as it was given.
+    /// Requires every one of `elements` to occur, by [`Same`]: `missing_elements` with
+    /// `expected`, the elements as given, and `missing`, in the order given, each given element
+    /// that does not occur, as many times as it was given.
     pub fn contains_all(mut self, elements: impl IntoIterator<Item = D::Output>) -> Self
     where
-        D::Output: Clone + Into<MetaValue> + Send + Sync,
+        D::Output: Same + Clone + Into<MetaValue> + Send + Sync,
     {
-        let expected: Vec<MetaValue> = elements.into_iter().map(|e| meta(&e)).collect();
-        let missing = {
-            let expected = expected.clone();
-            move |items: &Vec<D::Output>| -> Vec<MetaValue> {
-                let present: HashSet<MetaValue> = items.iter().map(meta).collect();
-                expected
-                    .iter()
-                    .filter(|e| !present.contains(*e))
-                    .cloned()
-                    .collect()
-            }
+        let wanted: Vec<D::Output> = elements.into_iter().collect();
+        let expected: Vec<MetaValue> = wanted.iter().cloned().map(Into::into).collect();
+        let missing = move |items: &Vec<D::Output>| -> Vec<D::Output> {
+            let present: HashSet<ByValue<&D::Output>> = items.iter().map(ByValue).collect();
+            wanted
+                .iter()
+                .filter(|e| !present.contains(&ByValue(*e)))
+                .cloned()
+                .collect()
         };
         let check = missing.clone();
         self.steps.require(
@@ -227,21 +218,30 @@ where
         self
     }
 
-    /// A decoder of the set of the elements, in the order each first occurs.
+    /// A decoder of the [`Set`] of the elements, each once by [`Same`], in the order each first
+    /// occurs. Any element type with sameness has one, floats included, where -0 and +0 are two
+    /// elements and every NaN one.
+    ///
+    /// ```
+    /// use raoh::json::prelude::*;
+    ///
+    /// let input: Value = serde_json::from_str("[0.0, -0.0, 0.0]").unwrap();
+    /// assert_eq!(f64().list().to_set().decode(&input).unwrap().len(), 2);
+    /// ```
     pub fn to_set(self) -> ToSet<D>
     where
-        D::Output: Eq + Hash,
+        D::Output: Same,
     {
-        self.map(collect_set as fn(Vec<D::Output>) -> IndexSet<D::Output>)
+        self.map(collect_set as fn(Vec<D::Output>) -> Set<D::Output>)
     }
 }
 
 /// The decoder [`ListDecoder::to_set`] returns.
-pub type ToSet<D> = Map<ListDecoder<D>, fn(Vec<Element<D>>) -> IndexSet<Element<D>>>;
+pub type ToSet<D> = Map<ListDecoder<D>, fn(Vec<Element<D>>) -> Set<Element<D>>>;
 
 type Element<D> = <D as Decoder<Value>>::Output;
 
-fn collect_set<T: Eq + Hash>(items: Vec<T>) -> IndexSet<T> {
+fn collect_set<T: Same>(items: Vec<T>) -> Set<T> {
     items.into_iter().collect()
 }
 

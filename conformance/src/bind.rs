@@ -701,7 +701,12 @@ impl<'a> Binder<'a> {
                     };
                     Built::List(d.contains_all(wanted), element)
                 }
-                "toSet" => Built::Any(d.to_set().map(V::Set).boxed(), Ty::Set(Box::new(element))),
+                "toSet" => Built::Any(
+                    d.to_set()
+                        .map(|set| V::Set(set.into_iter().collect()))
+                        .boxed(),
+                    Ty::Set(Box::new(element)),
+                ),
                 _ => return Err(no()),
             },
             Built::Dict(d, element) => match name {

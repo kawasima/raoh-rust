@@ -70,6 +70,7 @@ pub use path::{Path, Pointer, Segment};
 pub use presence::Presence;
 pub use value::decimal::{Decimal, ParseDecimalError};
 pub use value::float::{Float, float_order, float_same};
+pub use value::same::{Same, Set};
 pub use value::temporal::{
     Chronological, Date, DateTime, Instant, OffsetDateTime, ParseTemporalError, Time,
 };

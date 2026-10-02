@@ -94,6 +94,18 @@ impl Hash for V {
     }
 }
 
+/// The value model's sameness, which `V`'s `Eq` already is: scalars compare as raoh's
+/// `MetaValue` does, sets and maps in any order.
+impl raoh::Same for V {
+    fn same(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn same_hash<H: Hasher>(&self, state: &mut H) {
+        self.hash(state);
+    }
+}
+
 impl From<V> for MetaValue {
     /// The value as metadata, which only a scalar or a list of scalars is in the suite.
     fn from(v: V) -> Self {

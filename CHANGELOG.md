@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.2.0 - Unreleased
+## 0.9.0-dev - Unreleased
 
-The decoders follow the Raoh Specification 0.9.0-dev, and `scripts/conformance.sh` checks them
+The version is now the version of the Raoh Specification the crate follows. The decoders follow
+the Raoh Specification 0.9.0-dev, and `scripts/conformance.sh` checks them
 against every case of its suite: core, encode, messages-en and messages-ja are conformant.
 
 What each decoder accepts and reports:
@@ -39,6 +40,9 @@ New:
 - `Decimal`, of any precision with a 32-bit scale; `Date`, `Time`, `DateTime`, `OffsetDateTime`
   and `Instant`; `Uuid` and `Uri`. They replace `rust_decimal`, `uuid` and `url`, whose features
   are gone.
+- `Same`, the value model's sameness, and `Set`, a set by it. `unique`, `contains`,
+  `contains_all` and `to_set` compare by it, so they work on lists of floats and decimals as the
+  value model compares them, and `to_set` gives a `Set`.
 - `contains`, `contains_all` and `to_set` on lists; `non_empty`, `min_size`, `max_size` and `size`
   on `dict`.
 - `flat` fields, `strict(decoder, names)` around any decoder, `discriminate_by`,
