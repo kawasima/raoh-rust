@@ -6,6 +6,7 @@ use crate::path::Path;
 use crate::presence::Presence;
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 mod sealed {
     pub trait Sealed {}
@@ -83,7 +84,7 @@ impl<F: FieldSet> Object<F> {
 #[derive(Clone, Debug)]
 pub struct Strict<F> {
     fields: F,
-    known: Vec<String>,
+    known: HashSet<String>,
 }
 
 impl<F: FieldSet> Decoder<Value> for Strict<F> {
@@ -128,7 +129,7 @@ pub fn strict<D, S: Into<String>>(
 #[derive(Clone, Debug)]
 pub struct StrictMembers<D> {
     inner: D,
-    known: Vec<String>,
+    known: HashSet<String>,
 }
 
 impl<D: Decoder<Value>> Decoder<Value> for StrictMembers<D> {
@@ -142,33 +143,30 @@ impl<D: Decoder<Value>> Decoder<Value> for StrictMembers<D> {
 
 /// `result`, followed by `unknown_field` for every member of an object `input` that is not in
 /// `known` and that `result` has not already reported unknown.
+///
+/// Each member is looked up in `known` and among the members `result` reported, both sets built
+/// once, so the time this takes grows with the number of members and of issues, not with their
+/// product.
 fn reject_unknown<T>(
     result: Result<T, Issues>,
     input: &Value,
     path: &Path<'_>,
-    known: &[String],
+    known: &HashSet<String>,
 ) -> Result<T, Issues> {
     let Value::Object(members) = input else {
         return result;
     };
     let reported = match &result {
-        Ok(_) => &[][..],
-        Err(issues) => issues.as_slice(),
+        Ok(_) => HashSet::new(),
+        Err(issues) => reported_unknown(issues, path),
     };
     let unknown: Issues = members
         .keys()
-        .filter(|name| !known.iter().any(|k| k == *name))
-        .filter_map(|name| {
-            let at = path.key(name).to_pointer();
-            let already = reported
-                .iter()
-                .any(|issue| issue.is_unknown_member() && *issue.path() == at);
-            (!already).then(|| {
-                Issue::new(codes::UNKNOWN_FIELD)
-                    .with_meta("field", name.clone())
-                    .at(at)
-                    .marked_unknown_member()
-            })
+        .filter(|name| !known.contains(name.as_str()) && !reported.contains(name.as_str()))
+        .map(|name| {
+            Issue::at_path(&path.key(name), codes::UNKNOWN_FIELD)
+                .with_meta("field", name.clone())
+                .marked_unknown_member()
         })
         .collect();
     match result {
@@ -179,6 +177,24 @@ fn reject_unknown<T>(
             Err(issues)
         }
     }
+}
+
+/// The names of the members of the object at `path` that a strict decoder among `issues` has
+/// reported unknown: those of the issues it marked, one segment below `path`.
+fn reported_unknown<'a>(issues: &'a Issues, path: &Path<'_>) -> HashSet<&'a str> {
+    let mut marked = issues.iter().filter(|i| i.is_unknown_member()).peekable();
+    if marked.peek().is_none() {
+        return HashSet::new();
+    }
+    let here = path.to_pointer();
+    let depth = here.segments().len();
+    marked
+        .filter_map(|issue| {
+            let segments = issue.path().segments();
+            (segments.len() == depth + 1 && segments[..depth] == *here.segments())
+                .then(|| segments[depth].as_str())
+        })
+        .collect()
 }
 
 /// The fields [`object`] reads: a [`Field`], [`OptionalField`], [`PresenceField`] or [`Flat`], a
@@ -487,22 +503,7 @@ macro_rules! tuple_field_set {
     };
 }
 
-tuple_field_set!(A a 0);
-tuple_field_set!(A a 0, B b 1);
-tuple_field_set!(A a 0, B b 1, C c 2);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9, L l 10);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9, L l 10, M m 11);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9, L l 10, M m 11, N n 12);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9, L l 10, M m 11, N n 12, O o 13);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9, L l 10, M m 11, N n 12, O o 13, P p 14);
-tuple_field_set!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6, H h 7, J j 8, K k 9, L l 10, M m 11, N n 12, O o 13, P p 14, Q q 15);
+for_tuples!(tuple_field_set);
 
 #[cfg(test)]
 mod tests {

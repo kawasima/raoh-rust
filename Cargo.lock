@@ -282,7 +282,6 @@ dependencies = [
  "indexmap",
  "notation199x",
  "num-bigint",
- "num-integer",
  "num-traits",
  "proptest",
  "serde",

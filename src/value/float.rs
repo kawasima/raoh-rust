@@ -292,4 +292,123 @@ mod tests {
             proptest::prop_assert!(digits.len() <= shortest.len().max(2));
         }
     }
+
+    /// The canonical decimal of `v`, which is positive, as spec/observation.md defines it, worked
+    /// out with exact integers
+    /// and no formatting of the platform's: of the decimals of the least length that read back as
+    /// `v`, the closest, the even one of two equally close; and where one digit would do, the
+    /// closest of one or two digits.
+    fn reference<F: Float>(v: F, widened: f64) -> (String, i32) {
+        use num_bigint::BigInt;
+        use num_traits::One;
+        let bits = widened.abs().to_bits();
+        let (mantissa, exponent) = if (bits >> 52) == 0 {
+            (bits & ((1 << 52) - 1), -1074)
+        } else {
+            (
+                (bits & ((1 << 52) - 1)) | (1 << 52),
+                ((bits >> 52) as i32) - 1075,
+            )
+        };
+        // |v| = num / den exactly.
+        let (mut num, mut den) = (BigInt::from(mantissa), BigInt::one());
+        if exponent >= 0 {
+            num <<= exponent as usize;
+        } else {
+            den <<= (-exponent) as usize;
+        }
+        // The exponent of the first digit: 10^e <= |v| < 10^(e+1).
+        let mut e = (widened.abs().log10().floor()) as i32;
+        let pow = |k: i32| num_traits::pow(BigInt::from(10), k.unsigned_abs() as usize);
+        let below = |e: i32, num: &BigInt, den: &BigInt| {
+            if e >= 0 {
+                *num < pow(e) * den
+            } else {
+                num * pow(e) < *den
+            }
+        };
+        while below(e, &num, &den) {
+            e -= 1;
+        }
+        while !below(e + 1, &num, &den) {
+            e += 1;
+        }
+        // |v| rounded to `p` significant digits, half to even, as a coefficient.
+        let round = |p: i32| -> BigInt {
+            let k = p - 1 - e;
+            let (n, d) = if k >= 0 {
+                (&num * pow(k), den.clone())
+            } else {
+                (num.clone(), &den * pow(k))
+            };
+            let (q, r) = (&n / &d, &n % &d);
+            let twice = r * 2;
+            if twice > d || (twice == d && (&q % 2u8) == BigInt::one()) {
+                q + 1
+            } else {
+                q
+            }
+        };
+        let reads_back = |c: &BigInt, p: i32| -> bool {
+            format!("{c}e{}", e - (p - 1))
+                .parse::<F>()
+                .is_ok_and(|back| float_same(back, v))
+        };
+        let mut p = 1;
+        let mut c = round(1);
+        while !reads_back(&c, p) {
+            p += 1;
+            c = round(p);
+        }
+        if p == 1 {
+            let two = round(2);
+            if reads_back(&two, 2) {
+                c = two;
+                p = 2;
+            }
+        }
+        let text = c.to_string();
+        // A coefficient that rounded up to a power of ten has one more digit.
+        let exponent = e + (text.len() as i32 - p);
+        let digits = text.trim_end_matches('0');
+        let digits = if digits.is_empty() { "0" } else { digits };
+        (digits.to_owned(), exponent)
+    }
+
+    /// Floats spread over every exponent, from a fixed sequence so that a failure repeats.
+    fn sample(n: usize) -> impl Iterator<Item = u64> {
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        (0..n).map(move |_| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        })
+    }
+
+    #[test]
+    fn the_canonical_decimal_is_the_one_the_specification_defines() {
+        let mut ties = vec!["1765629.25".parse::<f32>().unwrap()];
+        ties.extend(sample(3_000).map(|x| f32::from_bits(x as u32)));
+        for v in ties
+            .into_iter()
+            .filter(|v| v.is_finite() && *v != 0.0)
+            .map(f32::abs)
+        {
+            assert_eq!(canonical_decimal(v), reference(v, f64::from(v)), "{v:e}");
+        }
+        let mut doubles = vec![
+            "-1749220892028010.25".parse::<f64>().unwrap(),
+            5e-324,
+            f64::MAX,
+        ];
+        doubles.extend(sample(3_000).map(f64::from_bits));
+        for v in doubles
+            .into_iter()
+            .filter(|v| v.is_finite() && *v != 0.0)
+            .map(f64::abs)
+        {
+            assert_eq!(canonical_decimal(v), reference(v, v), "{v:e}");
+        }
+    }
 }

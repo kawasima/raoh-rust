@@ -4,7 +4,7 @@ use crate::meta::MetaValue;
 use crate::presence::Presence;
 use crate::value::float::Float;
 use crate::{Date, DateTime, Decimal, Instant, OffsetDateTime, Time, Uri, Uuid};
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -25,7 +25,37 @@ pub trait Same {
     fn same_hash<H: Hasher>(&self, state: &mut H);
 }
 
+/// Gives types whose `Eq` and `Hash` are already the value model's sameness an implementation of
+/// [`Same`] by them, such as the enum an [`enum_of`](crate::json::enum_of) decodes into:
+///
+/// ```
+/// #[derive(Clone, PartialEq, Eq, Hash)]
+/// enum Color { Red, Green }
+/// raoh::same_by_eq!(Color);
+///
+/// use raoh::json::prelude::*;
+/// let colors = enum_of([("red", Color::Red), ("green", Color::Green)]).list().to_set();
+/// assert_eq!(colors.decode(&json!(["red", "RED", "green"])).unwrap().len(), 2);
+/// ```
+///
+/// A type with a float or a decimal in it compares them by Rust's equality through its `Eq`, if
+/// it has one, so it implements [`Same`] by hand instead.
+#[macro_export]
 macro_rules! same_by_eq {
+    ($($t:ty),* $(,)?) => {
+        $(impl $crate::Same for $t {
+            fn same(&self, other: &Self) -> bool {
+                self == other
+            }
+
+            fn same_hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+                ::std::hash::Hash::hash(self, state);
+            }
+        })*
+    };
+}
+
+macro_rules! same_by_eq_here {
     ($($t:ty),*) => {
         $(impl Same for $t {
             fn same(&self, other: &Self) -> bool {
@@ -40,7 +70,7 @@ macro_rules! same_by_eq {
 }
 
 // For these the value model's sameness is Rust's equality.
-same_by_eq!(
+same_by_eq_here!(
     bool,
     i8,
     i16,
@@ -170,9 +200,47 @@ impl<T: Same> Same for Presence<T> {
     }
 }
 
+/// Hashes `items` so that their order does not change the hash: each is hashed alone and the
+/// hashes are summed. A set's and a map's sameness ignore order, so their hashes must too.
+fn unordered_hash<'a, T: Same + 'a, H: Hasher>(
+    items: impl ExactSizeIterator<Item = &'a T>,
+    each: impl Fn(&T, &mut DefaultHasher),
+    state: &mut H,
+) {
+    items.len().hash(state);
+    items
+        .fold(0u64, |sum, item| {
+            let mut one = DefaultHasher::new();
+            each(item, &mut one);
+            sum.wrapping_add(one.finish())
+        })
+        .hash(state);
+}
+
+/// A map, as `dict` gives one: the same keys, each with the same value, in any order.
+impl<T: Same> Same for IndexMap<String, T> {
+    fn same(&self, other: &Self) -> bool {
+        self.len() == other.len()
+            && self
+                .iter()
+                .all(|(k, v)| other.get(k).is_some_and(|w| v.same(w)))
+    }
+
+    fn same_hash<H: Hasher>(&self, state: &mut H) {
+        self.len().hash(state);
+        let sum = self.iter().fold(0u64, |sum, (k, v)| {
+            let mut one = DefaultHasher::new();
+            k.hash(&mut one);
+            v.same_hash(&mut one);
+            sum.wrapping_add(one.finish())
+        });
+        sum.hash(state);
+    }
+}
+
 /// A product: the same element at each position.
 macro_rules! same_tuple {
-    ($($T:ident $idx:tt),+) => {
+    ($($T:ident $_v:ident $idx:tt),+) => {
         impl<$($T: Same),+> Same for ($($T,)+) {
             fn same(&self, other: &Self) -> bool {
                 $(self.$idx.same(&other.$idx))&&+
@@ -185,14 +253,7 @@ macro_rules! same_tuple {
     };
 }
 
-same_tuple!(A 0);
-same_tuple!(A 0, B 1);
-same_tuple!(A 0, B 1, C 2);
-same_tuple!(A 0, B 1, C 2, D 3);
-same_tuple!(A 0, B 1, C 2, D 3, E 4);
-same_tuple!(A 0, B 1, C 2, D 3, E 4, F 5);
-same_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
-same_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7);
+for_tuples!(same_tuple);
 
 /// A value keyed by its sameness, so that the standard collections compare it as the value model
 /// does.
@@ -265,6 +326,10 @@ impl<T: Same> Set<T> {
 
     /// Each value, in the order it was first added.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.iter_exact()
+    }
+
+    fn iter_exact(&self) -> impl ExactSizeIterator<Item = &T> {
         self.items.iter().map(|v| &v.0)
     }
 }
@@ -327,14 +392,7 @@ impl<T: Same> Same for Set<T> {
     }
 
     fn same_hash<H: Hasher>(&self, state: &mut H) {
-        // Summed, so that the order the values were added in does not change the hash.
-        let sum = self.items.iter().fold(0u64, |sum, v| {
-            let mut one = DefaultHasher::new();
-            v.0.same_hash(&mut one);
-            sum.wrapping_add(one.finish())
-        });
-        self.len().hash(state);
-        sum.hash(state);
+        unordered_hash(self.iter_exact(), |v, h| v.same_hash(h), state);
     }
 }
 

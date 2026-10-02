@@ -1,8 +1,7 @@
 //! Decimals of any precision that keep their scale.
 
-use num_bigint::BigInt;
-use num_integer::Integer;
-use num_traits::{Signed, Zero};
+use num_bigint::BigUint;
+use num_traits::Zero;
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
@@ -98,11 +97,6 @@ impl Decimal {
         }
     }
 
-    fn unscaled(&self) -> BigInt {
-        let magnitude = BigInt::from_str(&self.digits).expect("the digits are ASCII digits");
-        if self.negative { -magnitude } else { magnitude }
-    }
-
     /// Compares by value alone: `1.5` and `1.50` are equal here.
     pub fn numeric_cmp(&self, other: &Self) -> Ordering {
         let (a, b) = (self.signum(), other.signum());
@@ -143,30 +137,31 @@ impl Decimal {
 
     /// Whether this is an integer multiple of `divisor`, which is not zero.
     ///
-    /// The quotient is (coefficient ÷ divisor's coefficient) × 10^(divisor's scale - scale). Where
-    /// that power is positive it is taken modulo the divisor's coefficient, so that a divisor
-    /// such as `7E-2147483647` costs no more than one of a small scale.
+    /// The quotient is (coefficient ÷ divisor's coefficient) × 10^(divisor's scale - scale).
+    /// Where that power is positive it is taken modulo the divisor's coefficient, so that a
+    /// divisor such as `7E-2147483647` costs no more than one of a small scale. Where it is
+    /// negative, the coefficient has to end in that many zeros and what is before them has to be
+    /// a multiple. The coefficient, which comes from the input, is read as digits a block at a
+    /// time and only its remainder is kept, so the time grows with its length, not its square.
     pub fn is_multiple_of(&self, divisor: &Self) -> bool {
         assert!(!divisor.is_zero(), "divisor must not be zero");
         if self.is_zero() {
             return true;
         }
-        let modulus = divisor.unscaled().abs();
+        let modulus = BigUint::from_str(&divisor.digits).expect("the digits are ASCII digits");
         let shift = i64::from(divisor.scale) - i64::from(self.scale);
         if shift >= 0 {
-            let power = BigInt::from(10).modpow(&BigInt::from(shift), &modulus);
-            (self.unscaled().abs().mod_floor(&modulus) * power)
-                .mod_floor(&modulus)
-                .is_zero()
+            let power = BigUint::from(10u8).modpow(&BigUint::from(shift.unsigned_abs()), &modulus);
+            (digits_mod(&self.digits, &modulus) * power % &modulus).is_zero()
         } else {
-            let shift = shift.unsigned_abs();
-            // A coefficient of n digits is below 10^n, so no multiple of 10^shift with shift >= n
-            // divides it unless it is zero, which was answered above.
-            if shift >= self.digits.len() as u64 {
+            let zeros = shift.unsigned_abs();
+            // A coefficient of n digits is below 10^n, so no multiple of 10^zeros with
+            // zeros >= n divides it unless it is zero, which was answered above.
+            if zeros >= self.digits.len() as u64 {
                 return false;
             }
-            let step = modulus * pow10(shift as usize);
-            self.unscaled().abs().mod_floor(&step).is_zero()
+            let (before, after) = self.digits.split_at(self.digits.len() - zeros as usize);
+            after.bytes().all(|b| b == b'0') && digits_mod(before, &modulus).is_zero()
         }
     }
 
@@ -256,8 +251,16 @@ impl Decimal {
     }
 }
 
-fn pow10(exponent: usize) -> BigInt {
-    num_traits::pow(BigInt::from(10), exponent)
+/// The integer `digits` writes, modulo `modulus`, read 18 digits at a time.
+fn digits_mod(digits: &str, modulus: &BigUint) -> BigUint {
+    digits
+        .as_bytes()
+        .chunks(18)
+        .fold(BigUint::zero(), |remainder, block| {
+            let value = block.iter().fold(0u64, |v, b| v * 10 + u64::from(b - b'0'));
+            let shift = BigUint::from(10u64.pow(block.len() as u32));
+            (remainder * shift + value) % modulus
+        })
 }
 
 /// Reads the grammar `[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?`, keeping the scale.

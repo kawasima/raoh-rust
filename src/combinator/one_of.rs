@@ -88,7 +88,7 @@ impl<I: ?Sized, D: Decoder<I>> Alternatives<I> for Vec<D> {
 }
 
 macro_rules! alternatives {
-    ($First:ident $first:tt $(, $T:ident $idx:tt)*) => {
+    ($First:ident $_first:ident $first:tt $(, $T:ident $_v:ident $idx:tt)*) => {
         impl<I: ?Sized, $First: Decoder<I>, $($T: Decoder<I, Output = $First::Output>),*>
             sealed::Sealed<I> for ($First, $($T,)*)
         {
@@ -121,19 +121,4 @@ macro_rules! alternatives {
     };
 }
 
-alternatives!(A 0);
-alternatives!(A 0, B 1);
-alternatives!(A 0, B 1, C 2);
-alternatives!(A 0, B 1, C 2, D 3);
-alternatives!(A 0, B 1, C 2, D 3, E 4);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 13);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 13, P 14);
-alternatives!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 13, P 14, Q 15);
+for_tuples!(alternatives);

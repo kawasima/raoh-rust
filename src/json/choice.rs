@@ -371,7 +371,7 @@ impl<D: Decoder<Value>> Variants for Vec<Variant<D>> {
 }
 
 macro_rules! variants {
-    ($First:ident $first:tt $(, $T:ident $idx:tt)*) => {
+    ($First:ident $_first:ident $first:tt $(, $T:ident $_v:ident $idx:tt)*) => {
         impl<$First, $($T),*> sealed::Sealed for (Variant<$First>, $(Variant<$T>,)*) {}
 
         impl<$First: Decoder<Value>, $($T: Decoder<Value, Output = $First::Output>),*> Variants
@@ -403,22 +403,7 @@ macro_rules! variants {
     };
 }
 
-variants!(A 0);
-variants!(A 0, B 1);
-variants!(A 0, B 1, C 2);
-variants!(A 0, B 1, C 2, D 3);
-variants!(A 0, B 1, C 2, D 3, E 4);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 13);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 13, P 14);
-variants!(A 0, B 1, C 2, D 3, E 4, F 5, G 6, H 7, J 8, K 9, L 10, M 11, N 12, O 13, P 14, Q 15);
+for_tuples!(variants);
 
 #[cfg(test)]
 mod tests {

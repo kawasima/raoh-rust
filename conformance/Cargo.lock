@@ -102,7 +102,6 @@ dependencies = [
  "indexmap",
  "notation199x",
  "num-bigint",
- "num-integer",
  "num-traits",
  "serde",
  "serde_json",

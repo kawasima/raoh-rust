@@ -42,7 +42,9 @@ New:
   are gone.
 - `Same`, the value model's sameness, and `Set`, a set by it. `unique`, `contains`,
   `contains_all` and `to_set` compare by it, so they work on lists of floats and decimals as the
-  value model compares them, and `to_set` gives a `Set`.
+  value model compares them, and `to_set` gives a `Set`. Every value a decoder gives has it, maps
+  and products of up to 16 values included; `same_by_eq!` gives it to a type of your own, such as
+  the enum `enum_of` decodes into.
 - `contains`, `contains_all` and `to_set` on lists; `non_empty`, `min_size`, `max_size` and `size`
   on `dict`.
 - `flat` fields, `strict(decoder, names)` around any decoder, `discriminate_by`,
@@ -51,6 +53,14 @@ New:
 - `Vec` alternatives for `one_of`, `Vec` variants for `discriminate`, and `Vec`s of boxed fields
   for `object`, for decoders whose parts are decided at run time.
 - `raoh::encode`, with a string encoder and an object encoder of properties with defaults.
+
+Cost:
+
+- Reading a number allocates nothing, and lower-casing, upper-casing and normalizing ASCII text
+  do not look its characters up in Unicode's tables.
+- A strict decoder takes time in the members of its object, and `multiple_of` in the digits of the
+  decimal, where both took time in their square. `tests/cost.rs` holds every decoder that goes
+  over an input to time that grows with it once, and counts the allocations of reading numbers.
 
 Breaking:
 
